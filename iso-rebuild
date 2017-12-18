@@ -307,9 +307,9 @@ sanity_checks () {
 
 mount_sanity () {
   # logic to help save the shared dev env from suffering an rm
-  chroot_mounts=$(mount | awk '{print $3}' | grep $chroot | tac)
+  chroot_mounts=$(mount | awk '{print $3}' | grep $workdir | tac)
   [ -n "$chroot_mounts" ] && unmount_chroot_procs
-  chroot_mounts=$(mount | awk '{print $3}' | grep $chroot | tac)
+  chroot_mounts=$(mount | awk '{print $3}' | grep $workdir | tac)
   if [ -n "$chroot_mounts" ]
     then
       for mount in $chroot_mounts
