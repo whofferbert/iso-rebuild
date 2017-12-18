@@ -1,0 +1,648 @@
+#!/bin/bash
+#
+# by William Hofferbert
+#
+# This is a script to rebuild a specified *buntu iso into a customized iso
+#
+# requires: unsquashfs chroot mkisofs isohybrid mksquashfs date printf sed grep ps whoami
+# rsync mount umount awk fold tput dirname basename dd cp getopt chmod find du sort
+#
+
+#
+# Environmental Variables - Default settings
+#
+
+help_label="Support 16.04.3 LTS"
+help_iso_name="mate"
+
+chroot_user=custom
+label="iso-rebuild-custom"
+release_notes_url="http://github.com/whofferbert/something"
+
+workdir=/home/.iso-rebuild
+pkg_source=./install_packages
+
+comp=xz
+run_install=t
+upgrade_build_env=t
+clean_build_env=t
+start_over=t
+run_adjust=f
+no_out_iso=f
+
+upgrade_type="dist-upgrade"
+
+#
+# Functions
+#
+
+helps () {
+fold -w$(tput cols) -s << EOF
+
+This is designed to take a *buntu iso image and customize it by installing or removing packages as specified in the configuration.
+
+Must be run as root.
+
+  Usage:
+
+    $script_name [options ...] [Input] [Output]
+
+  Overview:
+
+
+   Required Input:
+
+    --base-iso -i ISOFILE
+      Select an iso file to start building the image off of.
+
+
+   Output Options:
+
+    --out-iso -o "OUT-ISOFILE-NAME"
+      Specify the filename of the finished iso. Default is in the format [base-iso-name]-custom.[extension]
+
+    --out-dir
+      Specify the output dir for the ISOs that will be built. Default is $outdir
+
+
+    --vm-iso -V
+      Run after the regular install, this will further modify the image with the specifications for VM packages 
+
+    --out-vm-iso "OUT-VM-ISOFILE-NAME"
+      Specify the filename of the finished iso. Default is in the format [base-iso-name]-custom-vm.[extension]
+
+ 
+    --no-out-iso
+      Do not rebuild the chroot into a squashfs for creating an iso
+        
+      
+    --gz-iso
+      Use gzip compression when building new squashfs instead of xz. (xz is default)
+      xz compression provides the best compression ratio, but gzip is quicker.
+
+
+    --write /dev/sdX
+      Write the resulting iso to the specified device. Specified device must not be mounted.
+      Will never write the vm-iso if produced as well.
+
+
+   Build Options:
+
+    --adjust -A /path/to/adjust_script
+      Does not delete previous environment, but executes the specified adjust_script in the build environment
+
+    --rebuild -R
+      Does not delete previous environment, just rebuilds the squashfs from the $img_dir
+
+
+    --build-preinstall-script
+      Specify a script to run before updating and running package adjustments
+
+    --build-postinstall-script
+      Specify a script to run after updating and running package adjustments
+
+    --vm-preinstall-script
+      Specify a script to run before running VM package adjustments
+
+    --vm-postinstall-script
+      Specify a script to run after running VM package adjustments
+
+    --package-config /path/to/package.conf
+      Provide the path to the package configuration to use (default is ${pkg_source})
+
+
+    --no-install-recommends
+      Do not install any additional recommended packages when rebuilding image. Default is to install recommended packages.
+
+    --no-upgrade
+      Do not run the package upgrade in the chroot environment. Default is to run a dist-upgrade.
+
+    --no-dist-upgrade
+      Run apt-get upgrade instead of apt-get dist-upgrade. Default is to run a dist-upgrade.
+
+    --no-clean
+      Do not clean up the chroot environment after running install. Default is to run the clean.
+
+
+   UX Options:
+
+    --label -l "CD LABEL"
+      Specify the label name for the live image. Default is "$label"
+
+    --iso-username
+      Specify the username that will be used with the casper installer. Default is "$chroot_user"
+
+    --release-url
+      Specify the release url to display during the casper install. Default is "$release_notes_url"
+
+
+   Local System Options:
+
+    --workdir -w "/path/to/workdir"
+      Specify workdir location. Default is $workdir
+
+
+   Debugging/Dev Options:
+
+    --quiet
+      Surpress output from chroot, but print script info. 
+
+    --real-quiet
+      Surpress all output but errors
+
+    --silent
+      Surpress all output, including errors. 
+
+    --help -h
+      Print this help text.
+
+
+
+   Examples:
+
+     # Create a new ISO with a custom label 
+     sudo $self -i ~/ubuntu-mate-16.04.2-desktop-amd64.iso -l "Support Linux"
+
+     # Create a new ISO and VM ISO with a custom label 
+     sudo $self -i ~/ubuntu-mate-16.04.2-desktop-amd64.iso -l "Support Linux" -V
+
+     # Create a new ISO and VM ISO with additional preinstall script for ISO
+     time sudo $self -i ~/ubuntu-mate-16.04.3-desktop-amd64.iso -o "${help_iso_name}-16.04.3-\$(date +%Y%m%d-%H%M%S)-stable-x86_64.iso" -l "$help_label" -V --build-preinstall-script ./pp_init.sh --package-config ./pp_install_pkgs
+
+     # Create a new ISO and VM ISO with additional preinstall script for ISO and a custom package config file
+     time sudo $self -i ~/ubuntu-mate-16.04.3-desktop-amd64.iso -o "${help_iso_name}-16.04.3-\$(date +%Y%m%d-%H%M%S)-stable-x86_64.iso" -l "PP Support 16.04.3 LTS" --build-preinstall-script ./pp_init.sh --package-config ./pp_install_pkgs
+
+     # Create a new ISO and VM ISO with additional preinstall script for ISO and a custom package config file
+     time sudo $self -i ~/ubuntu-mate-16.04.3-desktop-amd64.iso -o "${help_iso_name}-16.04.3-\$(date +%Y%m%d-%H%M%S)-stable-x86_64.iso" -l "PP Support 16.04.3 LTS" --build-preinstall-script ./pp_init.sh --package-config ./pp_install_pkgs -q --out-dir /home/maverick/
+
+EOF
+exit
+}
+
+
+handle_args () {
+  # $@ passed to this
+  OPTS=$(getopt -o hi:w:o:l:O:vqsVRb:A: --long "help,iso:,
+  workdir:,out-iso:,label:,no-install-recommends,verbose,
+  nowrite,quiet,silent,write:,gz-iso,vm-iso,rebuild,buildstate:,
+  adjust:,build-preinstall-script:,build-postinstall-script:,
+  vm-preinstall-script:,vm-postinstall-script:,no-upgrade,
+  no-clean,package-config:,out-dir:,out-vm-iso:,no-out-iso,
+  real-quiet,no-dist-upgrde,dont-run-install,iso-username:"  -- "$@")
+  
+  eval set -- "$OPTS"
+  while true
+    do
+      case "$1" in
+        -h|--help) helps; shift;;
+        -i|--iso) base_iso=$2; shift 2;;
+        -w|--workdir) workdir=$2; shift 2;;
+        -o|--out-iso) out_iso_name=$2; shift 2;;
+        -O|--out-dir) outdir=$2; shift 2;;
+        -b|--build) buildstate=$2; shift 2;;
+        -l|--lablel) label=$2; shift 2;;
+        -V|--vm-iso) vm_isobuild=t; shift;;
+        -A|--adjust) run_adjust=t ; start_over=f ; adjust_script=$2 ; shift 2;;
+        -R|--rebuild) start_over=f; shift;;
+        #-v|--verbose) verb="-x" ; shift;;
+        -q|--quiet) chroot_fd=">/dev/null" ; shift;;
+        -s|--silent) q=">/dev/null 2>/dev/null" ; shift;;
+        --real-quiet) q=">/dev/null" ; chroot_fd=">/dev/null 2>/dev/null"; shift;;
+        --out-vm-iso) vm_iso_name=$2; shift 2;;
+        --write) out_dev=$2; shift 2;;
+        --no-install-recommends) inst="--no-install-recommends" ; shift ;;
+        --build-preinstall-script) build_init_script=$2 ; shift 2;;
+        --build-postinstall-script) build_post_script=$2 ; shift 2;;
+        --vm-preinstall-script) vm_init_script=$2 ; shift 2;;
+        --vm-postinstall-script) vm_post_script=$2 ; shift 2;;
+        --package-config) pkg_source=$2 ; shift 2;;
+        --gz-iso) comp="gz" ; shift;;
+        --no-upgrade) upgrade_build_env=f ; shift;;
+        --no-clean) clean_build_env=f ; shift;;
+        --no-out-iso) no_out_iso=t ; shift;;
+        --no-dist-upgrade) upgrade_type="upgrade" ; shift;;
+        --dont-run-install) run_install="f" ; shift;;
+        --iso-username) chroot_user="$2" ; shift 2;;
+        --) shift; break;;
+      esac
+  done
+}
+
+
+err () {
+  echo "$1" >&2
+  exit 2
+}
+
+
+warn () {
+  echo "$1" >&2
+}
+
+
+find_nonroot_owner () {
+  #owner=''
+  pids="(^|\s)$$($|\s)"
+  #ps -ef | grep $$
+  i=0
+  while [ -z "$owner" ] 
+    do
+      pids=$(ps -eo user:30,pid,ppid,pcpu,pmem,vsz,rss,tty,stat,start,time,comm,args | awk '{print $2, $3}' | grep -P "$pids" | sed -r 's/\s/\n/g'| sort -u | sed -e 's/^/(^|\\s)/g' -e 's/$/($|\\s)/g' | paste -sd"|")
+      owner=$(ps -eo user:30,pid,ppid,pcpu,pmem,vsz,rss,tty,stat,start,time,comm,args | awk '{print $1, $2, $3}' | grep -P "$pids" | awk '{print $1}' | sort -u | grep -v 'root')
+      [ $i -gt 15 -o -z "$pids" ] && warn "Unable to identify non-root caller!" && echo root
+      i=$(($i + 1))
+    done
+  #echo $owner
+}
+
+
+sudoers_write () {
+  sudofile=$chroot/etc/sudoers.d/casper
+  [ -e $sudofile ] && chmod 660 $sudofile || touch $sudofile
+  echo "$chroot_user (ALL:ALL) NOPASSWD: ALL" > $sudofile
+  chmod 440 $sudofile
+}
+
+
+sanity_checks () {
+  # need root
+  [ $(whoami) != root ] && err "Error: must be root to continue."
+  # need pkg source
+  [ -e $pkg_source ] && source $pkg_source || err "Error: $pkg_source does not exist"
+  # need that base iso
+  [ -z "$base_iso" ] && err "Error: base-iso is required. See the help ($self --help"
+
+  # sanity checks for output device
+  if [ -n "$out_dev" ]
+    then
+      check=($(mount | grep "$out_dev"))
+      [ -n "$check" ] && err "Error: $out_dev is mounted at: ${check[2]}"
+      [ ! -b "$out_dev" ] && err "Error: $out_dev is not a valid device to write to!" 
+  fi
+
+  # iso only supports 32 character label
+  [ ${#label} -gt 32 ] && warn "Label \"$label\" is too long! (32 characters max) Truncating label ..." && label=$(echo "$label" | cut -c1-32)
+
+  # set out iso name if need be
+  if [ -z "$out_iso_name" ] 
+    then
+      base_iso_name=${base_iso##*/}
+      out_iso_name=$(echo "$base_iso_name" | sed -r 's/\.(\w{3})$/-custom.\1/g')
+  fi
+  
+  # set vm iso name too
+  if [ "$vm_isobuild" = 't' ]
+    then
+      [ -z "$vm_iso_name" ] && vm_iso_name=$(echo "$out_iso_name" | sed -r 's/\.(\w{3})$/-vm.\1/g')
+  fi
+
+  tmp_mount=$workdir/base
+  img_dir=$workdir/image
+  chroot=$workdir/chroot
+
+  logfile=$outdir/${script_name}.log
+  errfile=$outdir/${script_name}.err
+
+}
+
+
+mount_sanity () {
+  # logic to help save the shared dev env from suffering an rm
+  chroot_mounts=$(mount | awk '{print $3}' | grep $chroot | tac)
+  [ -n "$chroot_mounts" ] && unmount_chroot_procs
+  chroot_mounts=$(mount | awk '{print $3}' | grep $chroot | tac)
+  if [ -n "$chroot_mounts" ]
+    then
+      for mount in $chroot_mounts
+        do
+          umount $mount || err "unable to unmount $mount!"
+        done
+  fi
+}
+
+
+cleanup () {
+  echo "Received interrupt, exiting ..."
+  chroot $chroot/ umount /dev/pts/ /sys/ /proc/
+  umount $base_iso
+  umount $chroot/dev
+  mount_sanity
+  exit 1
+}
+
+
+clean_build_env () {
+  # make this purge the autoremove?
+  eval chroot $chroot apt-get autoremove -y $chroot_fd
+  eval chroot $chroot apt-get clean $chroot_fd
+  find $chroot/tmp/ -mindepth 1 -delete
+}
+
+
+reset_workdir () {
+  mount_sanity
+
+  echo -e "\nRemoving old chroot and image files from $workdir ...\n"
+  rm -rf $workdir/image $chroot 
+
+  [ ! -d $tmp_mount ] && mkdir -p $tmp_mount 
+  [ ! -d $img_dir ] && mkdir -p $img_dir
+}
+
+
+mount_chroot_procs () {
+  mount --bind /dev $chroot/dev
+  eval chroot $chroot mount none -t proc /proc $chroot_fd
+  eval chroot $chroot mount none -t sysfs /sys $chroot_fd
+  eval chroot $chroot mount none -t devpts /dev/pts $chroot_fd
+}
+
+
+unmount_chroot_procs () {
+  eval chroot $chroot umount -lf /dev/pts $chroot_fd
+  eval chroot $chroot umount -lf /sys $chroot_fd
+  eval chroot $chroot umount -lf /proc $chroot_fd
+  eval chroot $chroot umount /dev
+}
+
+
+extract_fs_from_mount () {
+  mount -o loop $base_iso $tmp_mount 2>/dev/null ||  err "Failed to mount $base_iso"
+  
+  echo -e "\nCopying base image to disk ...\n"
+  rsync --info=progress2 -a $tmp_mount/ $img_dir/ 
+  
+  umount $tmp_mount 
+  
+  # grab base fs from the filesystem.squashfs
+  echo -e "\nExtracting live filesystem to chroot environment ...\n"
+  unsquashfs -d $chroot $img_dir/casper/filesystem.squashfs
+}
+
+
+chroot_install () {
+  pkgs=$@
+  if [ -n "$pkgs" ] 
+    then
+      echo -e "\nInstalling $pkgs into chroot environment ... \n"
+      eval chroot $chroot apt-get install -y $inst $pkg_batch $chroot_fd
+  fi
+}
+
+
+chroot_purge () {
+  pkgs=$@
+  if [ -n "$pkgs" ] 
+    then
+      echo -e "\nPurging $pkgs from chroot environment ...\n"
+      eval chroot $chroot apt-get purge -y $pkg_batch $chroot_fd
+  fi
+}
+
+
+chroot_exec () {
+  # assumes necessary chroot mounts are there already ...
+  exec_script=$1
+  safe_dir=/tmp/$RANDOM
+  mkdir -p $chroot/$safe_dir
+  cp $exec_script $chroot/$safe_dir
+  script=${exec_script##*/}
+  chmod 755 $chroot/$safe_dir/$script
+  echo "Entering chroot environment and executing $script ..."
+  eval chroot $chroot $safe_dir/$script $chroot_fd
+  rm -rf $chroot/$safe_dir
+}
+
+
+run_install () {
+  echo -e "\nRunning iso customizations ...\n\nThis may take a while ...\n"
+
+  [ -n "$build_init_script" ] && chroot_exec $build_init_script 
+
+  eval chroot $chroot apt-get update $chroot_fd
+
+  for pkg_rm in "$PRERM_PKGS" "$REMOVE_PKGS" "$POSTRM_PKGS"
+    do
+      chroot_purge $pkg_rm
+    done
+
+  for pkg_batch in "$PREINSTALL_PKGS" "$INSTALL_PKGS" "$POSTINSTALL_PKGS" "$TESTING_PKGS"
+    do
+      chroot_install $pkg_batch
+    done
+
+  # upgrade
+  if [ "$upgrade_build_env" = "t" ] 
+    then
+      echo -e "Entering chroot and running apt-get $upgrade_type ...\n"
+      eval chroot $chroot apt-get $upgrade_type -y $chroot_fd
+  fi
+
+  # post-upgrade
+  for pkg_rm in "$POST_UPGRADE_PRERM_PKGS" "$POST_UPGRADE_REMOVE_PKGS" "$POST_UPGRADE_POSTRM_PKGS"
+    do
+      chroot_purge $pkg_rm
+    done
+
+  for pkg_batch in "$POST_UPGRADE_PREINSTALL_PKGS" "$POST_UPGRADE_INSTALL_PKGS" "$POST_UPGRADE_POSTINSTALL_PKGS"
+    do
+      chroot_install $pkg_batch
+    done
+
+  [ "$chroot_user" != "custom" ] && sudoers_write
+
+  [ -n "$build_post_script" ] && chroot_exec $build_post_script 
+
+
+  [ "$clean_build_env" = "t" ] && clean_build_env
+}
+
+
+vm_iso_rebuild () {
+  echo -e "\nRunning VM modifications ...\n\nThis may take a while ..."
+  
+  # tweak deployment.type
+  mount_chroot_procs
+
+  [ -n "$vm_init_script" ] && chroot_exec $vm_init_script 
+
+  for pkg_rm in "$VM_PRERM_PKGS" "$VM_REMOVE_PKGS" "$VM_POSTRM_PKGS"
+    do
+      chroot_purge $pkg_rm
+    done
+ 
+  for pkg_batch in "$VM_PREINSTALL_PKGS" "$VM_INSTALL_PKGS" "$VM_POSTINSTALL_PKGS" "$VM_TESTING_PKGS"
+    do
+      chroot_install $pkg_batch
+  done
+
+  [ -n "$vm_post_script" ] && chroot_exec $vm_post_script 
+
+  unmount_chroot_procs
+  
+  [ "$comp" = "gz" ] && vm_struct="--gz-iso"
+
+  # this recalls the current script with --rebuild to finalize the VM iso
+  $self $vm_struct -i $base_iso -o "${vm_iso_name}" -l "$label" --rebuild --package-config $pkg_source --out-dir "$outdir" --dont-run-install
+}
+
+
+write_cd_info () {
+  # make files writable
+  chmod 644 $img_dir/README.diskdefines $img_dir/.disk/info $img_dir/.disk/release_notes_url $img_dir/isolinux/txt.cfg
+  # make adjustments
+  sed -i "s/DISKNAME.\+/DISKNAME $label/g" $img_dir/README.diskdefines
+  # first term of the next line dictates the live user name and system name,
+  printf "$chroot_user $label" > $img_dir/.disk/info
+  printf "$release_notes_url" > $img_dir/.disk/release_notes_url
+  sed -i 's/quiet splash/noeject noprompt/g' $img_dir/isolinux/txt.cfg
+  # put perms back
+  chmod 444 $img_dir/README.diskdefines $img_dir/.disk/info $img_dir/.disk/release_notes_url $img_dir/isolinux/txt.cfg
+}
+
+
+rebuild_squashfs () {
+  # build chroot package list for live cd
+  chroot $chroot dpkg-query -W --showformat='${Package} ${Version}\n' > $img_dir/casper/filesystem.manifest 
+  
+  # get rid of old squashfs.
+  rm -f $img_dir/casper/filesystem.squashfs
+  
+  # build new squashfs. 
+  echo -e "Building new filesystem from chroot environment ...\n\n  This will take some time ...\n"
+  if [ $comp = xz ]
+    then
+      mksquashfs $chroot $img_dir/casper/filesystem.squashfs -b 1048576 -comp xz -Xdict-size 100%
+    else
+      mksquashfs $chroot $img_dir/casper/filesystem.squashfs
+  fi
+  
+  #  sizes
+  printf $(du -sx --block-size=1 $chroot | cut -f1) > $img_dir/casper/filesystem.size
+}
+
+
+chroot_to_iso () {
+  # set up files for iso to behave
+  write_cd_info
+  
+  # the heavy lifting...
+  rebuild_squashfs
+
+  # build md5sums.txt for iso ...
+  cd $img_dir
+  find . -type f -print0 | xargs -0 md5sum | grep -v "\./md5sum.txt$" > $img_dir/md5sum.txt
+  cd - >/dev/null
+  
+  # build iso
+  echo -e "\nBuilding new image ...\n"
+  mkisofs -r -V "$label" -cache-inodes -J -l -b isolinux/isolinux.bin -c isolinux/boot.cat -no-emul-boot -boot-load-size 4 -boot-info-table -input-charset 'utf-8' -o $outdir/$out_iso_name   $img_dir/.  2>&1 | grep -v "estimate finish"
+  
+  # make it hybrid
+  echo -e "\nMaking image USB friendly ...\n"
+  isohybrid $outdir/$out_iso_name 
+}
+
+
+fresh_start () {
+  reset_workdir
+
+  extract_fs_from_mount
+
+  # set up networking based on host for chroot
+  cp /etc/hosts $chroot/etc 
+  cp /etc/resolv.conf $chroot/etc 
+}
+
+
+logging () {
+  startdate=$(date +%s)
+  [ -e $logfile ] && mv $logfile ${logfile}.old
+  [ -e $errfile ] && mv $errfile ${errfile}.old
+  #exec > >(logger | tee -a $logfile)
+  exec > >(tee -a $logfile)
+  exec 2> >(tee -a $errfile)
+}
+
+
+logger () {
+  while read
+    do
+      echo "[$(date +%Y-%m-%d\ %H:%M:%S.%N)] $REPLY"
+    done
+}
+
+
+write () {
+  echo -e "\nWriting $out_iso_name to $out_dev ...\n\n  This may take some time ...\n"
+  [ ! -e $outdir/$out_iso_name ] && err "Error: $outdir/$out_iso_name does not exist!"
+  dd if=$outdir/$out_iso_name of=$out_dev
+}
+
+
+status_out () {
+  enddate=$(date +%s)
+  echo ""
+}
+
+set_env () {
+  script_path=$( cd "$(dirname "$0")" ; pwd -P ) 
+  script_name=$(basename $0)
+  self=$script_path/$script_name
+
+  base_iso=
+  inst=
+  #verb=
+  q=
+  out_dev=
+  vm_iso_name=
+
+  owner=
+  [ $(whoami) = "root" ] && find_nonroot_owner
+  eval outdir=~$owner/
+}
+
+main () {
+ 
+  ### logic and stuff
+  sanity_checks
+  
+  # trap interrupts to not break things
+  trap cleanup 1 2 3 6 9 15 17 19 23
+
+  logging
+
+  # destroy all previous work?
+  [ "${start_over}" = 't' ] && fresh_start
+
+  # virtual fs are important
+  mount_chroot_procs
+
+  # building logic.... run adjust or install
+  [ "$run_adjust" = "t" ] && chroot_exec $adjust_script
+  [ "$run_install" = "t" ] && run_install
+  
+  #unmount virtual fs to prevent host corruption
+  unmount_chroot_procs
+  # TODO are there issues with this now?
+
+  # rebuild squashfs and create iso
+  [ "$no_out_iso" = "f" ] && chroot_to_iso 
+  
+  # possibly make vm image
+  [ "$vm_isobuild" = "t" ] && vm_iso_rebuild
+  
+  # check for write to device?
+  [ -n "$out_dev" ] && write
+
+  [ "$no_status" = f ] && status_out
+}
+
+
+# do the thing
+set_env
+# handle args
+handle_args $@
+eval main $q
+
+
