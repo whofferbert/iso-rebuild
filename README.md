@@ -6,6 +6,42 @@ This is achieved by unpacking the squashfs from the specificed ISO file to your 
 
 The inspiration for this comes from other similar utilities like remastersys, but did not fully suit my needs.
 
+I have provided a default package.conf that has a list of packages that I commonly include in ISOs
+
+
+
+In order to function properly, this script requires the following utilities (in no particular order):
+
+bash
+unsquashfs
+chroot
+mkisofs
+isohybrid
+mksquashfs
+date
+printf
+sed
+grep
+ps
+whoami
+rsync
+mount
+umount
+awk
+fold
+tput
+dirname
+basename
+dd
+cp
+getopt
+chmod
+find
+du
+sort
+
+
+
 
 ```bash
 
