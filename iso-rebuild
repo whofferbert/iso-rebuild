@@ -7,6 +7,9 @@
 # requires: unsquashfs chroot mkisofs isohybrid mksquashfs date printf sed grep ps whoami
 # rsync mount umount awk fold tput dirname basename dd cp getopt chmod find du sort
 #
+#
+# TODO: add support for automatically adding repositories from a list
+#
 
 #
 # Environmental Variables - Default settings
@@ -17,7 +20,7 @@ help_iso_name="mate"
 
 chroot_user=custom
 label="iso-rebuild-custom"
-release_notes_url="http://github.com/whofferbert/something"
+release_notes_url="https://github.com/whofferbert/iso-rebuild"
 
 workdir=/home/.iso-rebuild
 pkg_source=./install_packages
@@ -45,7 +48,7 @@ Must be run as root.
 
   Usage:
 
-    $script_name [options ...] [Input] [Output]
+    $script_name [--base-iso|-i  /path/to/Input ISO] [options ...] 
 
   Overview:
 
@@ -161,19 +164,19 @@ Must be run as root.
    Examples:
 
      # Create a new ISO with a custom label:
-     sudo $self -i ~/ubuntu-mate-16.04.2-desktop-amd64.iso -l "Support Linux"
+     sudo $script_name -i ~/ubuntu-mate-16.04.2-desktop-amd64.iso -l "Support Linux"
 
      # Create a new ISO and VM ISO with a custom label:
-     sudo $self -i ~/ubuntu-mate-16.04.2-desktop-amd64.iso -l "Support Linux" -V
+     sudo $script_name -i ~/ubuntu-mate-16.04.2-desktop-amd64.iso -l "Support Linux" -V
 
      # Create a new ISO and VM ISO with additional VM preinstall script:
-     time sudo $self -i ~/ubuntu-mate-16.04.3-desktop-amd64.iso -o "${help_iso_name}-16.04.3-\$(date +%Y%m%d-%H%M%S)-stable-x86_64.iso" -l "$help_label" -V --package-config ./install_pkgs --vm-preinstall-script ./pp_vm_init.sh
+     time sudo $script_name -i ~/ubuntu-mate-16.04.3-desktop-amd64.iso -o "${help_iso_name}-16.04.3-\$(date +%Y%m%d-%H%M%S)-stable-x86_64.iso" -l "$help_label" -V --package-config ./install_pkgs --vm-preinstall-script ./pp_vm_init.sh
 
      # Create a new ISO with additional preinstall script for ISO and a custom package config file:
-     time sudo $self -i ~/ubuntu-mate-16.04.3-desktop-amd64.iso -o "${help_iso_name}-16.04.3-\$(date +%Y%m%d-%H%M%S)-stable-x86_64.iso" -l "$help_label" --build-preinstall-script ./init.sh --package-config ./install_pkgs
+     time sudo $script_name -i ~/ubuntu-mate-16.04.3-desktop-amd64.iso -o "${help_iso_name}-16.04.3-\$(date +%Y%m%d-%H%M%S)-stable-x86_64.iso" -l "$help_label" --build-preinstall-script ./init.sh --package-config ./install_pkgs
 
      # Create a new ISO with additional preinstall script for ISO, a custom package config file, and a specified output directory:
-     time sudo $self -i ~/ubuntu-mate-16.04.3-desktop-amd64.iso -o "${help_iso_name}-16.04.3-\$(date +%Y%m%d-%H%M%S)-stable-x86_64.iso" -l "$help_label" --build-preinstall-script ./init.sh --package-config ./install_pkgs -q --out-dir /home/$USER
+     time sudo $script_name -i ~/ubuntu-mate-16.04.3-desktop-amd64.iso -o "${help_iso_name}-16.04.3-\$(date +%Y%m%d-%H%M%S)-stable-x86_64.iso" -l "$help_label" --build-preinstall-script ./init.sh --package-config ./install_pkgs -q --out-dir /home/$USER
 
 EOF
 exit
