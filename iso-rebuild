@@ -12,7 +12,7 @@
 # Environmental Variables - Default settings
 #
 
-help_label="Support 16.04.3 LTS"
+help_label="MATE 16.04.3 LTS"
 help_iso_name="mate"
 
 chroot_user=custom
@@ -160,20 +160,20 @@ Must be run as root.
 
    Examples:
 
-     # Create a new ISO with a custom label 
+     # Create a new ISO with a custom label:
      sudo $self -i ~/ubuntu-mate-16.04.2-desktop-amd64.iso -l "Support Linux"
 
-     # Create a new ISO and VM ISO with a custom label 
+     # Create a new ISO and VM ISO with a custom label:
      sudo $self -i ~/ubuntu-mate-16.04.2-desktop-amd64.iso -l "Support Linux" -V
 
-     # Create a new ISO and VM ISO with additional preinstall script for ISO
-     time sudo $self -i ~/ubuntu-mate-16.04.3-desktop-amd64.iso -o "${help_iso_name}-16.04.3-\$(date +%Y%m%d-%H%M%S)-stable-x86_64.iso" -l "$help_label" -V --build-preinstall-script ./pp_init.sh --package-config ./pp_install_pkgs
+     # Create a new ISO and VM ISO with additional VM preinstall script:
+     time sudo $self -i ~/ubuntu-mate-16.04.3-desktop-amd64.iso -o "${help_iso_name}-16.04.3-\$(date +%Y%m%d-%H%M%S)-stable-x86_64.iso" -l "$help_label" -V --package-config ./install_pkgs --vm-preinstall-script ./pp_vm_init.sh
 
-     # Create a new ISO and VM ISO with additional preinstall script for ISO and a custom package config file
-     time sudo $self -i ~/ubuntu-mate-16.04.3-desktop-amd64.iso -o "${help_iso_name}-16.04.3-\$(date +%Y%m%d-%H%M%S)-stable-x86_64.iso" -l "PP Support 16.04.3 LTS" --build-preinstall-script ./pp_init.sh --package-config ./pp_install_pkgs
+     # Create a new ISO with additional preinstall script for ISO and a custom package config file:
+     time sudo $self -i ~/ubuntu-mate-16.04.3-desktop-amd64.iso -o "${help_iso_name}-16.04.3-\$(date +%Y%m%d-%H%M%S)-stable-x86_64.iso" -l "$help_label" --build-preinstall-script ./init.sh --package-config ./install_pkgs
 
-     # Create a new ISO and VM ISO with additional preinstall script for ISO and a custom package config file
-     time sudo $self -i ~/ubuntu-mate-16.04.3-desktop-amd64.iso -o "${help_iso_name}-16.04.3-\$(date +%Y%m%d-%H%M%S)-stable-x86_64.iso" -l "PP Support 16.04.3 LTS" --build-preinstall-script ./pp_init.sh --package-config ./pp_install_pkgs -q --out-dir /home/maverick/
+     # Create a new ISO with additional preinstall script for ISO, a custom package config file, and a specified output directory:
+     time sudo $self -i ~/ubuntu-mate-16.04.3-desktop-amd64.iso -o "${help_iso_name}-16.04.3-\$(date +%Y%m%d-%H%M%S)-stable-x86_64.iso" -l "$help_label" --build-preinstall-script ./init.sh --package-config ./install_pkgs -q --out-dir /home/$USER
 
 EOF
 exit
@@ -182,8 +182,8 @@ exit
 
 handle_args () {
   # $@ passed to this
-  OPTS=$(getopt -o hi:w:o:l:O:vqsVRb:A: --long "help,iso:,
-  workdir:,out-iso:,label:,no-install-recommends,verbose,
+  OPTS=$(getopt -o hi:w:o:l:O:qsVRb:A: --long "help,iso:,
+  workdir:,out-iso:,label:,no-install-recommends,
   nowrite,quiet,silent,write:,gz-iso,vm-iso,rebuild,buildstate:,
   adjust:,build-preinstall-script:,build-postinstall-script:,
   vm-preinstall-script:,vm-postinstall-script:,no-upgrade,
@@ -204,7 +204,6 @@ handle_args () {
         -V|--vm-iso) vm_isobuild=t; shift;;
         -A|--adjust) run_adjust=t ; start_over=f ; adjust_script=$2 ; shift 2;;
         -R|--rebuild) start_over=f; shift;;
-        #-v|--verbose) verb="-x" ; shift;;
         -q|--quiet) chroot_fd=">/dev/null" ; shift;;
         -s|--silent) q=">/dev/null 2>/dev/null" ; shift;;
         --real-quiet) q=">/dev/null" ; chroot_fd=">/dev/null 2>/dev/null"; shift;;
@@ -241,9 +240,7 @@ warn () {
 
 
 find_nonroot_owner () {
-  #owner=''
   pids="(^|\s)$$($|\s)"
-  #ps -ef | grep $$
   i=0
   while [ -z "$owner" ] 
     do
@@ -252,7 +249,6 @@ find_nonroot_owner () {
       [ $i -gt 15 -o -z "$pids" ] && warn "Unable to identify non-root caller!" && echo root
       i=$(($i + 1))
     done
-  #echo $owner
 }
 
 
@@ -592,7 +588,6 @@ set_env () {
 
   base_iso=
   inst=
-  #verb=
   q=
   out_dev=
   vm_iso_name=
@@ -624,7 +619,6 @@ main () {
   
   #unmount virtual fs to prevent host corruption
   unmount_chroot_procs
-  # TODO are there issues with this now?
 
   # rebuild squashfs and create iso
   [ "$no_out_iso" = "f" ] && chroot_to_iso 
