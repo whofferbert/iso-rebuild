@@ -4,12 +4,6 @@
 #
 # This is a script to rebuild a specified *buntu iso into a customized iso
 #
-# requires: unsquashfs chroot mkisofs isohybrid mksquashfs date printf sed grep ps whoami
-# rsync mount umount awk fold tput dirname basename dd cp getopt chmod find du sort
-#
-#
-# TODO: add support for automatically adding repositories from a list
-#
 
 #
 # Environmental Variables - Default settings
@@ -18,7 +12,7 @@
 help_label="MATE 16.04.3 LTS"
 help_iso_name="mate"
 
-chroot_user=custom
+default_casper_username=custom
 label="iso-rebuild-custom"
 release_notes_url="https://github.com/whofferbert/iso-rebuild"
 
@@ -29,11 +23,14 @@ comp=xz
 run_install=t
 upgrade_build_env=t
 clean_build_env=t
+clean_local_fs=t
 start_over=t
 run_adjust=f
 no_out_iso=f
 
 upgrade_type="dist-upgrade"
+
+requires="unsquashfs chroot mkisofs isohybrid mksquashfs date sed grep ps whoami rsync mount umount awk fold tput dirname basename dd cp getopt chmod find du sort"
 
 #
 # Functions
@@ -100,15 +97,19 @@ Must be run as root.
 
     --build-preinstall-script
       Specify a script to run before updating and running package adjustments
+        A script to add repositories or keys would go here
 
     --build-postinstall-script
       Specify a script to run after updating and running package adjustments
+        A script to clean the environment or force file modifications might go here
 
     --vm-preinstall-script
       Specify a script to run before running VM package adjustments
+        Same as --build-preinstall-script, but specific to VM ISOs
 
     --vm-postinstall-script
       Specify a script to run after running VM package adjustments
+        Same as --build-postinstall-script, but specific to VM ISOs
 
     --package-config /path/to/package.conf
       Provide the path to the package configuration to use (default is ${pkg_source})
@@ -123,7 +124,7 @@ Must be run as root.
     --no-dist-upgrade
       Run apt-get upgrade instead of apt-get dist-upgrade. Default is to run a dist-upgrade.
 
-    --no-clean
+    --no-clean-chroot
       Do not clean up the chroot environment after running install. Default is to run the clean.
 
 
@@ -132,8 +133,8 @@ Must be run as root.
     --label -l "CD LABEL"
       Specify the label name for the live image. Default is "$label"
 
-    --iso-username
-      Specify the username that will be used with the casper installer. Default is "$chroot_user"
+    --casper-name
+      Specify the name that will be used as both the user and hostname within the casper installer. Default is "$casper_username"
 
     --release-url
       Specify the release url to display during the casper install. Default is "$release_notes_url"
@@ -143,6 +144,9 @@ Must be run as root.
 
     --workdir -w "/path/to/workdir"
       Specify workdir location. Default is $workdir
+
+    --no-clean-local-fs
+      Does not delete the contents of the workdir after creating the ISOs.
 
 
    Debugging/Dev Options:
@@ -184,47 +188,48 @@ exit
 
 
 handle_args () {
-  # $@ passed to this
   OPTS=$(getopt -o hi:w:o:l:O:qsVRb:A: --long "help,iso:,
   workdir:,out-iso:,label:,no-install-recommends,
   nowrite,quiet,silent,write:,gz-iso,vm-iso,rebuild,buildstate:,
   adjust:,build-preinstall-script:,build-postinstall-script:,
   vm-preinstall-script:,vm-postinstall-script:,no-upgrade,
-  no-clean,package-config:,out-dir:,out-vm-iso:,no-out-iso,
-  real-quiet,no-dist-upgrde,dont-run-install,iso-username:"  -- "$@")
+  no-clean-chroot,package-config:,out-dir:,out-vm-iso:,no-out-iso,
+  real-quiet,no-dist-upgrde,dont-run-install,casper-name:
+  no-clean-local-fs"  -- "$@")
   
   eval set -- "$OPTS"
   while true
     do
       case "$1" in
         -h|--help) helps; shift;;
-        -i|--iso) base_iso=$2; shift 2;;
-        -w|--workdir) workdir=$2; shift 2;;
-        -o|--out-iso) out_iso_name=$2; shift 2;;
-        -O|--out-dir) outdir=$2; shift 2;;
-        -b|--build) buildstate=$2; shift 2;;
-        -l|--lablel) label=$2; shift 2;;
+        -i|--iso) base_iso="$2"; shift 2;;
+        -w|--workdir) workdir="$2"; shift 2;;
+        -o|--out-iso) out_iso_name="$2"; shift 2;;
+        -O|--out-dir) outdir="$2"; shift 2;;
+        -b|--build) buildstate="$2"; shift 2;;
+        -l|--lablel) label="$2"; shift 2;;
         -V|--vm-iso) vm_isobuild=t; shift;;
         -A|--adjust) run_adjust=t ; start_over=f ; adjust_script=$2 ; shift 2;;
         -R|--rebuild) start_over=f; shift;;
         -q|--quiet) chroot_fd=">/dev/null" ; shift;;
         -s|--silent) q=">/dev/null 2>/dev/null" ; shift;;
         --real-quiet) q=">/dev/null" ; chroot_fd=">/dev/null 2>/dev/null"; shift;;
-        --out-vm-iso) vm_iso_name=$2; shift 2;;
-        --write) out_dev=$2; shift 2;;
+        --out-vm-iso) vm_iso_name="$2"; shift 2;;
+        --write) out_dev="$2"; shift 2;;
         --no-install-recommends) inst="--no-install-recommends" ; shift ;;
-        --build-preinstall-script) build_init_script=$2 ; shift 2;;
-        --build-postinstall-script) build_post_script=$2 ; shift 2;;
-        --vm-preinstall-script) vm_init_script=$2 ; shift 2;;
-        --vm-postinstall-script) vm_post_script=$2 ; shift 2;;
-        --package-config) pkg_source=$2 ; shift 2;;
+        --build-preinstall-script) build_init_script="$2" ; shift 2;;
+        --build-postinstall-script) build_post_script="$2" ; shift 2;;
+        --vm-preinstall-script) vm_init_script="$2" ; shift 2;;
+        --vm-postinstall-script) vm_post_script="$2" ; shift 2;;
+        --package-config) pkg_source="$2" ; shift 2;;
         --gz-iso) comp="gz" ; shift;;
         --no-upgrade) upgrade_build_env=f ; shift;;
-        --no-clean) clean_build_env=f ; shift;;
+        --no-clean-chroot) clean_build_env=f ; shift;;
         --no-out-iso) no_out_iso=t ; shift;;
         --no-dist-upgrade) upgrade_type="upgrade" ; shift;;
+        --no-clean-local-fs) clean_local_fs="f" ; shift;;
         --dont-run-install) run_install="f" ; shift;;
-        --iso-username) chroot_user="$2" ; shift 2;;
+        --casper-name) casper_username="$2" ; shift 2;;
         --) shift; break;;
       esac
   done
@@ -255,15 +260,13 @@ find_nonroot_owner () {
 }
 
 
-sudoers_write () {
-  sudofile=$chroot/etc/sudoers.d/casper
-  [ -e $sudofile ] && chmod 660 $sudofile || touch $sudofile
-  echo "$chroot_user (ALL:ALL) NOPASSWD: ALL" > $sudofile
-  chmod 440 $sudofile
-}
-
-
 sanity_checks () {
+  # required stuff
+  for req in $requires
+    do
+      [ -z "$(which $req)" ] && err "Error: $script_name requires $req to continue!"
+    done
+
   # need root
   [ $(whoami) != root ] && err "Error: must be root to continue."
   # need pkg source
@@ -302,6 +305,7 @@ sanity_checks () {
   logfile=$outdir/${script_name}.log
   errfile=$outdir/${script_name}.err
 
+  [ -z "$casper_username" ] && casper_username=$default_casper_username
 }
 
 
@@ -331,21 +335,23 @@ cleanup () {
 
 
 clean_build_env () {
-  # make this purge the autoremove?
-  eval chroot $chroot apt-get autoremove -y $chroot_fd
+  eval autorm_pkgs=$(chroot $chroot apt-get autoremove -s | grep ^Remv | awk '{print $2}') $chroot_fd
+  [ -n "$autorm_pkgs" ] && eval chroot $chroot apt-get purge $autorm_pkgs $chroot_fd
   eval chroot $chroot apt-get clean $chroot_fd
   find $chroot/tmp/ -mindepth 1 -delete
 }
 
+clear_workdir () {
+  echo -e "\nRemoving old files from $workdir ...\n"
+  rm -rf $workdir
+}
 
 reset_workdir () {
   mount_sanity
-
-  echo -e "\nRemoving old chroot and image files from $workdir ...\n"
-  rm -rf $workdir/image $chroot 
-
-  [ ! -d $tmp_mount ] && mkdir -p $tmp_mount 
-  [ ! -d $img_dir ] && mkdir -p $img_dir
+  clear_workdir
+  mkdir -p $tmp_mount 
+  mkdir -p $img_dir
+  mkdir -p $chroot
 }
 
 
@@ -381,11 +387,12 @@ extract_fs_from_mount () {
 
 chroot_install () {
   pkgs=$@
-  if [ -n "$pkgs" ] 
-    then
-      echo -e "\nInstalling $pkgs into chroot environment ... \n"
-      eval chroot $chroot apt-get install -y $inst $pkg_batch $chroot_fd
-  fi
+  [ -n "$pkgs" ] && {
+    echo -e "\nInstalling $pkgs into chroot environment ... \n"
+    eval chroot $chroot apt-get install -y $inst $pkg_batch $chroot_fd
+  } || {
+    echo "fail"
+  }
 }
 
 
@@ -448,11 +455,10 @@ run_install () {
       chroot_install $pkg_batch
     done
 
-  [ "$chroot_user" != "custom" ] && sudoers_write
-
+  # exec postinstall script
   [ -n "$build_post_script" ] && chroot_exec $build_post_script 
 
-
+  # clean build env?
   [ "$clean_build_env" = "t" ] && clean_build_env
 }
 
@@ -491,9 +497,9 @@ write_cd_info () {
   chmod 644 $img_dir/README.diskdefines $img_dir/.disk/info $img_dir/.disk/release_notes_url $img_dir/isolinux/txt.cfg
   # make adjustments
   sed -i "s/DISKNAME.\+/DISKNAME $label/g" $img_dir/README.diskdefines
-  # first term of the next line dictates the live user name and system name,
-  printf "$chroot_user $label" > $img_dir/.disk/info
-  printf "$release_notes_url" > $img_dir/.disk/release_notes_url
+  # first term of the next line used to dictate the live user name and system name
+  echo -n "$casper_username $label" > $img_dir/.disk/info
+  echo -n "$release_notes_url" > $img_dir/.disk/release_notes_url
   sed -i 's/quiet splash/noeject noprompt/g' $img_dir/isolinux/txt.cfg
   # put perms back
   chmod 444 $img_dir/README.diskdefines $img_dir/.disk/info $img_dir/.disk/release_notes_url $img_dir/isolinux/txt.cfg
@@ -632,13 +638,14 @@ main () {
   # check for write to device?
   [ -n "$out_dev" ] && write
 
+  [ "$clean_local_fs" = "t" ] && clear_workdir
+
   [ "$no_status" = f ] && status_out
 }
 
 
 # do the thing
 set_env
-# handle args
 handle_args $@
 eval main $q
 
