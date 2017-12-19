@@ -45,15 +45,13 @@ sort
 
 ```bash
 
-$ ./iso-rebuild -h
-
 This is designed to take a *buntu iso image and customize it by installing or removing packages as specified in the configuration.
 
 Must be run as root.
 
   Usage:
 
-    iso-rebuild [--base-iso|-i  /path/to/ISOFILE] [options ...]
+    iso-rebuild [--base-iso|-i  /path/to/Input ISO] [options ...] 
 
   Overview:
 
@@ -105,15 +103,19 @@ Must be run as root.
 
     --build-preinstall-script
       Specify a script to run before updating and running package adjustments
+        A script to add repositories or keys would go here
 
     --build-postinstall-script
       Specify a script to run after updating and running package adjustments
+        A script to clean the environment or force file modifications might go here
 
     --vm-preinstall-script
       Specify a script to run before running VM package adjustments
+        Same as --build-preinstall-script, but specific to VM ISOs
 
     --vm-postinstall-script
       Specify a script to run after running VM package adjustments
+        Same as --build-postinstall-script, but specific to VM ISOs
 
     --package-config /path/to/package.conf
       Provide the path to the package configuration to use (default is ./install_packages)
@@ -128,7 +130,7 @@ Must be run as root.
     --no-dist-upgrade
       Run apt-get upgrade instead of apt-get dist-upgrade. Default is to run a dist-upgrade.
 
-    --no-clean
+    --no-clean-chroot
       Do not clean up the chroot environment after running install. Default is to run the clean.
 
 
@@ -137,8 +139,8 @@ Must be run as root.
     --label -l "CD LABEL"
       Specify the label name for the live image. Default is "iso-rebuild-custom"
 
-    --iso-username
-      Specify the username that will be used with the casper installer. Default is "custom"
+    --casper-name
+      Specify the name that will be used as both the user and hostname within the casper installer. Default is ""
 
     --release-url
       Specify the release url to display during the casper install. Default is "https://github.com/whofferbert/iso-rebuild"
@@ -148,6 +150,9 @@ Must be run as root.
 
     --workdir -w "/path/to/workdir"
       Specify workdir location. Default is /home/.iso-rebuild
+
+    --no-clean-local-fs
+      Does not delete the contents of the workdir after creating the ISOs.
 
 
    Debugging/Dev Options:
@@ -181,8 +186,8 @@ Must be run as root.
      time sudo iso-rebuild -i ~/ubuntu-mate-16.04.3-desktop-amd64.iso -o "mate-16.04.3-$(date +%Y%m%d-%H%M%S)-stable-x86_64.iso" -l "MATE 16.04.3 LTS" --build-preinstall-script ./init.sh --package-config ./install_pkgs
 
      # Create a new ISO with additional preinstall script for ISO, a custom package config file, and a specified output directory:
-     time sudo iso-rebuild -i ~/ubuntu-mate-16.04.3-desktop-amd64.iso -o "mate-16.04.3-$(date +%Y%m%d-%H%M%S)-stable-x86_64.iso" -l "MATE 16.04.3 LTS" --build-preinstall-script ./init.sh --package-config ./install_pkgs -q --out-dir /home/whofferbert
-
+     time sudo iso-rebuild -i ~/ubuntu-mate-16.04.3-desktop-amd64.iso -o "mate-16.04.3-$(date +%Y%m%d-%H%M%S)-stable-x86_64.iso" -l "MATE 16.04.3 LTS" --build-preinstall-script ./init.sh --package-config ./install_pkgs -q --out-dir 
+/home/whofferbert
 
 ```
 
