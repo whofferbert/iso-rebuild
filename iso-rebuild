@@ -342,7 +342,7 @@ clean_build_env () {
 }
 
 clear_workdir () {
-  echo -e "\nRemoving old files from $workdir ...\n"
+  echo -e "\nRemoving old files from $workdir ..."
   rm -rf $workdir
 }
 
@@ -351,7 +351,8 @@ reset_workdir () {
   clear_workdir
   mkdir -p $tmp_mount 
   mkdir -p $img_dir
-  mkdir -p $chroot
+  # DO NOT MAKE THE CHROOT DIR
+  # unsquashfs will fail if it exists
 }
 
 
