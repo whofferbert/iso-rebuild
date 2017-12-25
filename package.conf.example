@@ -94,12 +94,10 @@ conky-std
 gedit
 gedit-common
 gedit-plugins
-
 mariadb-client
 ffmpeg
 gettext
 keyutils
-finger
 compizconfig-settings-manager
 sqlite
 sqlite3"
@@ -199,7 +197,7 @@ POST_UPGRADE_POSTRM_PKGS=""
 # Install Packages
 #
 
-PREINSTALL_PKGS="$sys_libs $system_req"
+PREINSTALL_PKGS="$system_req"
 INSTALL_PKGS="
 $ff_and_java_pkgs 
 $browsers 
