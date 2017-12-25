@@ -130,16 +130,16 @@ Must be run as root.
 
    Filesystem Options:
 
-    --add-archive-to-user "USERNAME" "/path/to/archive.tar.gz"
+    --add-archive-to-user "USERNAME /path/to/local/archive.tar.gz"
       Extract the contents of a tar archive to USERNAME's home directory (/home/USERNAME)
 
-    --add-zip-to-user "USERNAME" "/path/to/zipfile.zip"
+    --add-zip-to-user "USERNAME /path/to/local/zipfile.zip"
       Extract the contents of a zip file to USERNAME's home directory (/home/USERNAME)
 
-    --add-archive-to-root "/path/to/archive.tar.gz"
+    --add-archive-to-root "/path/to/local/archive.tar.gz"
       Extract the contents of a tar archive to the root of the filesystem
  
-    --add-zip-to-root "/path/to/zipfile.zip"
+    --add-zip-to-root "/path/to/local/zipfile.zip"
       Extract the contents of a zip file to the root of the filesystem
 
 
@@ -210,7 +210,8 @@ handle_args () {
   vm-preinstall-script:,vm-postinstall-script:,no-upgrade,
   no-clean-chroot,package-config:,out-dir:,out-vm-iso:,no-out-iso,
   real-quiet,no-dist-upgrde,dont-run-install,casper-name:
-  no-clean-local-fs"  -- "$@")
+  no-clean-local-fs,add-archive-to-user:,add-zip-to-user:,
+  add-archive-to-root:,add-zip-to-root:"  -- "$@")
   
   eval set -- "$OPTS"
   while true
@@ -245,8 +246,8 @@ handle_args () {
         --no-clean-local-fs) clean_local_fs="f" ; shift;;
         --dont-run-install) run_install="f" ; shift;;
         --casper-name) casper_username="$2" ; shift 2;;
-        --add-archive-to-user) addtar+=("/home/$2/ $3") ; shift 3;;
-        --add-zip-to-user) addzip+=("/home/$2/ $3") ; shift 3;;
+        --add-archive-to-user) addtar+=("/home/$2") ; shift 2;;
+        --add-zip-to-user) addzip+=("/home/$2") ; shift 2;;
         --add-archive-to-root) addtar+=("/ $2"); shift 2;;
         --add-zip-to-root) addzip+=("/ $2"); shift 2;;
         --) shift; break;;
@@ -416,7 +417,7 @@ chroot_install () {
           check=$(chroot $chroot apt-cache policy $pkg_check | grep -P "Candidate:\s")
           if [ -z "$check" ]
             then
-              warn "$pkg is not a valid package!"
+              warn "$pkg_check is not a valid package! Skipping ..."
             else
               pkg_sanity="$pkg_check $pkg_sanity"
           fi
@@ -455,6 +456,7 @@ add_zips_to_chroot () {
     do
       dest=$(echo "$data" | cut -d" " -f1)
       file=$(echo "$data" | cut -d" " -f2-)
+      mkdir -p $chroot/$dest
       unzip $file -d $chroot/$dest
     done
 }
@@ -464,6 +466,7 @@ add_tars_to_chroot () {
     do
       dest=$(echo "$data" | cut -d" " -f1)
       file=$(echo "$data" | cut -d" " -f2-)
+      mkdir -p $chroot/$dest
       tar -xf $file -C $chroot/$dest
     done
 }
@@ -474,8 +477,8 @@ run_install () {
 
   [ -n "$build_init_script" ] && chroot_exec $build_init_script 
 
-  add_zips_to_chroot
-  add_tars_to_chroot
+  [ ${#addzip[@]} -gt 0 ] && add_zips_to_chroot
+  [ ${#addtar[@]} -gt 0 ] && add_tars_to_chroot
 
   eval chroot $chroot apt-get update $chroot_fd
 
