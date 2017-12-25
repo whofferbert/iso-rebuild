@@ -30,7 +30,7 @@ no_out_iso=f
 
 upgrade_type="dist-upgrade"
 
-requires="unsquashfs chroot mkisofs isohybrid mksquashfs date sed grep ps whoami rsync mount umount awk fold tput dirname basename dd cp getopt chmod find du sort"
+requires="unsquashfs chroot mkisofs isohybrid mksquashfs date sed grep ps whoami rsync mount umount awk fold tput dirname basename dd cp getopt chmod find du sort unzip tar"
 
 #
 # Functions
@@ -409,9 +409,20 @@ chroot_install () {
   pkgs=$@
   if [ -n "$pkgs" ]
     then
-      #echo -e "\nChecking $pkgs into chroot environment ... \n"
-      echo -e "\nInstalling $pkgs into chroot environment ... \n"
-      eval chroot $chroot apt-get install -y $inst $pkg_batch $chroot_fd
+      echo -e "\nChecking package validity ... \n"
+      pkg_sanity=
+      for pkg_check in $pkgs
+        do
+          check=$(chroot $chroot apt-cache policy $pkg_check | grep -P "Candidate:\s")
+          if [ -z "$check" ]
+            then
+              warn "$pkg is not a valid package!"
+            else
+              pkg_sanity="$pkg_check $pkg_sanity"
+          fi
+        done
+      echo -e "\nInstalling $pkg_sanity into chroot environment ... \n"
+      eval chroot $chroot apt-get install -y $inst $pkg_sanity $chroot_fd
   fi
 }
 
