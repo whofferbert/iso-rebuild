@@ -128,6 +128,21 @@ Must be run as root.
       Do not clean up the chroot environment after running install. Default is to run the clean.
 
 
+   Filesystem Options:
+
+    --add-archive-to-user "USERNAME" "/path/to/archive.tar.gz"
+      Extract the contents of a tar archive to USERNAME's home directory (/home/USERNAME)
+
+    --add-zip-to-user "USERNAME" "/path/to/zipfile.zip"
+      Extract the contents of a zip file to USERNAME's home directory (/home/USERNAME)
+
+    --add-archive-to-root "/path/to/archive.tar.gz"
+      Extract the contents of a tar archive to the root of the filesystem
+ 
+    --add-zip-to-root "/path/to/zipfile.zip"
+      Extract the contents of a zip file to the root of the filesystem
+
+
    UX Options:
 
     --label -l "CD LABEL"
@@ -230,6 +245,10 @@ handle_args () {
         --no-clean-local-fs) clean_local_fs="f" ; shift;;
         --dont-run-install) run_install="f" ; shift;;
         --casper-name) casper_username="$2" ; shift 2;;
+        --add-archive-to-user) addtar+=("/home/$2/ $3") ; shift 3;;
+        --add-zip-to-user) addzip+=("/home/$2/ $3") ; shift 3;;
+        --add-archive-to-root) addtar+=("/ $2"); shift 2;;
+        --add-zip-to-root) addzip+=("/ $2"); shift 2;;
         --) shift; break;;
       esac
   done
@@ -388,12 +407,12 @@ extract_fs_from_mount () {
 
 chroot_install () {
   pkgs=$@
-  [ -n "$pkgs" ] && {
-    echo -e "\nInstalling $pkgs into chroot environment ... \n"
-    eval chroot $chroot apt-get install -y $inst $pkg_batch $chroot_fd
-  } || {
-    echo "fail"
-  }
+  if [ -n "$pkgs" ]
+    then
+      #echo -e "\nChecking $pkgs into chroot environment ... \n"
+      echo -e "\nInstalling $pkgs into chroot environment ... \n"
+      eval chroot $chroot apt-get install -y $inst $pkg_batch $chroot_fd
+  fi
 }
 
 
@@ -420,11 +439,32 @@ chroot_exec () {
   rm -rf $chroot/$safe_dir
 }
 
+add_zips_to_chroot () {
+  for data in "${addzip[*]}"
+    do
+      dest=$(echo "$data" | cut -d" " -f1)
+      file=$(echo "$data" | cut -d" " -f2-)
+      unzip $file -d $chroot/$dest
+    done
+}
+
+add_tars_to_chroot () {
+  for data in "${addtar[*]}"
+    do
+      dest=$(echo "$data" | cut -d" " -f1)
+      file=$(echo "$data" | cut -d" " -f2-)
+      tar -xf $file -C $chroot/$dest
+    done
+}
+
 
 run_install () {
   echo -e "\nRunning iso customizations ...\n\nThis may take a while ...\n"
 
   [ -n "$build_init_script" ] && chroot_exec $build_init_script 
+
+  add_zips_to_chroot
+  add_tars_to_chroot
 
   eval chroot $chroot apt-get update $chroot_fd
 
@@ -601,6 +641,9 @@ set_env () {
   q=
   out_dev=
   vm_iso_name=
+
+  addzip=()
+  addtar=()
 
   owner=
   [ $(whoami) = "root" ] && find_nonroot_owner
