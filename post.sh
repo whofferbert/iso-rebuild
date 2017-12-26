@@ -10,10 +10,13 @@
 #
 # and provide that to the script
 #
-dpkg -i /tmp/deb/*.deb
-if [ $? -ne 0 ]
+if [ -d /tmp/deb/ ] 
   then
-    apt-get -f install
-    dpkg -i /tmp/archive/deb/*.deb
+    dpkg -i /tmp/deb/*.deb
+    if [ $? -ne 0 ]
+      then
+        apt-get -f install
+        dpkg -i /tmp/archive/deb/*.deb
+    fi
 fi
 exit 0
