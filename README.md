@@ -39,13 +39,17 @@ chmod
 find
 du
 sort
+date
 
 
 
 
 ```bash
 
-This is designed to take a *buntu iso image and customize it by installing or removing packages as specified in the configuration.
+$ ./iso-rebuild -h
+
+This is designed to take a *buntu iso image and customize it by installing or removing packages as specified in the 
+configuration.
 
 Must be run as root.
 
@@ -101,28 +105,30 @@ Must be run as root.
       Does not delete previous environment, just rebuilds the squashfs from the 
 
 
-    --build-preinstall-script
+    --preinstall
       Specify a script to run before updating and running package adjustments
-        A script to add repositories or keys would go here
+        May be specified any number of times.
 
-    --build-postinstall-script
+    --postinstall
       Specify a script to run after updating and running package adjustments
-        A script to clean the environment or force file modifications might go here
+        May be specified any number of times.
 
-    --vm-preinstall-script
+    --vm-preinstall
       Specify a script to run before running VM package adjustments
-        Same as --build-preinstall-script, but specific to VM ISOs
+        Same as --preinstall, but specific to VM ISOs
 
-    --vm-postinstall-script
+    --vm-postinstall
       Specify a script to run after running VM package adjustments
-        Same as --build-postinstall-script, but specific to VM ISOs
+        Same as --postinstall, but specific to VM ISOs
 
     --package-config /path/to/package.conf
-      Provide the path to the package configuration to use (default is ./install_packages)
+      Provide the path to the package configuration to use (default is 
+/home/whofferbert/git/bash/iso-rebuild/package.conf)
 
 
     --no-install-recommends
-      Do not install any additional recommended packages when rebuilding image. Default is to install recommended packages.
+      Do not install any additional recommended packages when rebuilding image. Default is to install recommended 
+packages.
 
     --no-upgrade
       Do not run the package upgrade in the chroot environment. Default is to run a dist-upgrade.
@@ -134,6 +140,16 @@ Must be run as root.
       Do not clean up the chroot environment after running install. Default is to run the clean.
 
 
+   Filesystem Options (can be specified multiple times):
+
+    --add-archive "/path/to/local/archive.tar.gz"
+      Extract the contents of a tar archive to the root of the filesystem
+        tar -czvf ~/iso-rebuild-test/will.tar.gz /home/whofferbert/{.bashrc,.ssh,.vimrc}
+ 
+    --add-zip "/path/to/local/zipfile.zip"
+      Extract the contents of a zip file to the root of the filesystem
+
+
    UX Options:
 
     --label -l "CD LABEL"
@@ -143,7 +159,8 @@ Must be run as root.
       Specify the name that will be used as both the user and hostname within the casper installer. Default is ""
 
     --release-url
-      Specify the release url to display during the casper install. Default is "https://github.com/whofferbert/iso-rebuild"
+      Specify the release url to display during the casper install. Default is 
+"https://github.com/whofferbert/iso-rebuild"
 
 
    Local System Options:
@@ -157,12 +174,16 @@ Must be run as root.
 
    Debugging/Dev Options:
 
+    --verbose
+      Print all output generated when running in the chroot
+
     --quiet
-      Surpress output from chroot, but print script info. 
+      Surpress output from chroot, but print script info. (default)
+      Note that this causes problems with interactive prompts, so you may want
+      to try using --verbose if you seem to be having issues.
 
     --real-quiet
       Surpress all output but errors
-
     --silent
       Surpress all output, including errors. 
 
@@ -177,17 +198,52 @@ Must be run as root.
      sudo iso-rebuild -i ~/ubuntu-mate-16.04.2-desktop-amd64.iso -l "Support Linux"
 
      # Create a new ISO and VM ISO with a custom label:
-     sudo iso-rebuild -i ~/ubuntu-mate-16.04.2-desktop-amd64.iso -l "Support Linux" -V
+     sudo iso-rebuild -i ~/ubuntu-mate-16.04.2-desktop-amd64.iso -V
+
+     # Create an iso with a custom output name:
+     sudo iso-rebuild -i ~/ubuntu-mate-16.04.3-desktop-amd64.iso -o "mate-16.04.3-$(date 
++%Y%m%d-%H%M%S)-stable-x86_64.iso
+
+     # create an ISO with additional .deb files installed via postinstall script and a matching archive :
+     mkdir /tmp/deb/
+     cp -t /tmp/deb/ /path/to/deb1 /path/to/deb2 ...
+     tar -czvf /tmp/debs.tar.gz /tmp/deb/*
+     sudo iso-rebuild -i ~/ubuntu-mate-16.04.3-desktop-amd64.iso --add-archive /tmp/debs.tar.gz --postinstall 
+./post.sh 
+
+     # create an ISO with some contents from your home directory on it :
+     tar -czvf /tmp/whofferbert.tar.gz /home/whofferbert/{.ssh,.bashrc,.vimrc,Documents}
+     sudo iso-rebuild -i ~/ubuntu-mate-16.04.3-desktop-amd64.iso --add-archive /tmp/whofferbert.tar.gz 
+
+     # Optionally, you could include your whole home dir, 
+     # but beware, the ISO may be large, and your filesystem needs size to handle it
+     # You should not try this unless your home dir is less than 25% of your free space
+
+     tar -czvf /tmp/whofferbert.tar.gz /home/whofferbert/.
+     sudo iso-rebuild -i ~/ubuntu-mate-16.04.3-desktop-amd64.iso --add-archive /tmp/whofferbert.tar.gz 
+     
+
+     # add to the ISO a copy of /etc/default/sysstat that is enabled, via archive:
+     sudo iso-rebuild -i ~/ubuntu-mate-16.04.3-desktop-amd64.iso --add-archive ./sysstat_on.tar.gz 
 
      # Create a new ISO and VM ISO with additional VM preinstall script:
-     time sudo iso-rebuild -i ~/ubuntu-mate-16.04.3-desktop-amd64.iso -o "mate-16.04.3-$(date +%Y%m%d-%H%M%S)-stable-x86_64.iso" -l "MATE 16.04.3 LTS" -V --package-config ./install_pkgs --vm-preinstall-script ./pp_vm_init.sh
+     time sudo iso-rebuild -i ~/ubuntu-mate-16.04.3-desktop-amd64.iso -V --vm-preinstall ./pp_vm_init.sh
 
-     # Create a new ISO with additional preinstall script for ISO and a custom package config file:
-     time sudo iso-rebuild -i ~/ubuntu-mate-16.04.3-desktop-amd64.iso -o "mate-16.04.3-$(date +%Y%m%d-%H%M%S)-stable-x86_64.iso" -l "MATE 16.04.3 LTS" --build-preinstall-script ./init.sh --package-config ./install_pkgs
+     # Create a new ISO with additional preinstall script for adding a Google repository and Chrome:
+     time sudo iso-rebuild -i ~/ubuntu-mate-16.04.3-desktop-amd64.iso --preinstall ./init.sh 
 
-     # Create a new ISO with additional preinstall script for ISO, a custom package config file, and a specified output directory:
-     time sudo iso-rebuild -i ~/ubuntu-mate-16.04.3-desktop-amd64.iso -o "mate-16.04.3-$(date +%Y%m%d-%H%M%S)-stable-x86_64.iso" -l "MATE 16.04.3 LTS" --build-preinstall-script ./init.sh --package-config ./install_pkgs -q --out-dir 
-/home/whofferbert
+     # Create a new ISO with a custom package config file, and a specified output directory:
+     time sudo iso-rebuild -i ~/ubuntu-mate-16.04.3-desktop-amd64.iso --package-config ./install_pkgs 
+
+     # Create a new ISO with a custom package config file, and a specified output directory:
+     time sudo iso-rebuild -i ~/ubuntu-mate-16.04.3-desktop-amd64.iso --out-dir /home/whofferbert
+
+     # You can combine most/all of the above options ...
+     sudo iso-rebuild -i ~/ubuntu-mate-16.04.3-desktop-amd64.iso -l "will-linux" --package-config 
+./package.conf.example --add-archive ~/iso-rebuild-test/will.tar.gz --preinstall ./init.sh --no-install-recommends 
+-o "will-buntu-16.04.iso" --add-archive ./sysstat_on.tar.gz --postinstall ./post.sh --out-dir ~/
+
+
 
 ```
 
