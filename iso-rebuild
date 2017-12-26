@@ -17,20 +17,6 @@ label="iso-rebuild-custom"
 release_notes_url="https://github.com/whofferbert/iso-rebuild"
 
 workdir=/home/.iso-rebuild
-pkg_source=./install_packages
-
-comp=xz
-run_install=t
-upgrade_build_env=t
-clean_build_env=t
-clean_local_fs=t
-start_over=t
-run_adjust=f
-no_out_iso=f
-
-upgrade_type="dist-upgrade"
-
-requires="unsquashfs chroot mkisofs isohybrid mksquashfs date sed grep ps whoami rsync mount umount awk fold tput dirname basename dd cp getopt chmod find du sort unzip tar date"
 
 #
 # Functions
@@ -197,9 +183,17 @@ Must be run as root.
      tar -czvf /tmp/debs.tar.gz /tmp/deb/*
      sudo $script_name -i ~/$help_in_iso --add-archive /tmp/debs.tar.gz --postinstall ./post.sh 
 
-     # create an ISO with contents from your home directory on it :
+     # create an ISO with some contents from your home directory on it :
      tar -czvf /tmp/$owner.tar.gz /home/$owner/{.ssh,.bashrc,.vimrc,Documents}
      sudo $script_name -i ~/$help_in_iso --add-archive /tmp/$owner.tar.gz 
+
+     # Optionally, you could include your whole home dir, 
+     # but beware, the ISO may be large, and your filesystem needs size to handle it
+     # You should not try this unless your home dir is less than 25% of your free space
+
+     tar -czvf /tmp/$owner.tar.gz /home/$owner/.
+     sudo $script_name -i ~/$help_in_iso --add-archive /tmp/$owner.tar.gz 
+     
 
      # add to the ISO a copy of /etc/default/sysstat that is enabled, via archive:
      sudo $script_name -i ~/$help_in_iso --add-archive ./sysstat_on.tar.gz 
@@ -217,7 +211,7 @@ Must be run as root.
      time sudo $script_name -i ~/$help_in_iso --out-dir /home/$owner
 
      # You can combine most/all of the above options ...
-     sudo $script_name -i ~/$help_in_iso -l "will-linux" --package-config ./package.conf.example --add-archive ~/iso-rebuild-test/will.tar.gz --preinstall ./init.sh --no-install-recommends -o ~/will-buntu-16.04.iso --add-archive ./sysstat_on.tar.gz --postinstall ./post.sh
+     sudo $script_name -i ~/$help_in_iso -l "will-linux" --package-config ./package.conf.example --add-archive ~/iso-rebuild-test/will.tar.gz --preinstall ./init.sh --no-install-recommends -o "will-buntu-16.04.iso" --add-archive ./sysstat_on.tar.gz --postinstall ./post.sh --out-dir ~/
 
 
 
@@ -228,14 +222,13 @@ exit
 
 handle_args () {
   OPTS=$(getopt -o hi:w:o:l:O:qsVRb:A:v --long "help,iso:,
-  workdir:,out-iso:,label:,no-install-recommends,
-  nowrite,quiet,silent,write:,gz-iso,vm-iso,rebuild,buildstate:,
-  adjust:,preinstall:,postinstall:,
-  vm-preinstall:,vm-postinstall:,no-upgrade,
-  no-clean-chroot,package-config:,out-dir:,out-vm-iso:,no-out-iso,
+  workdir:,out-iso:,label:,no-install-recommends,nowrite,
+  quiet,silent,write:,gz-iso,vm-iso,rebuild,buildstate:,
+  adjust:,preinstall:,postinstall:,vm-preinstall:,
+  vm-postinstall:,no-upgrade,no-clean-chroot,package-config:,
+  out-dir:,out-vm-iso:,no-out-iso,verbose,no-status,
   real-quiet,no-dist-upgrde,dont-run-install,casper-name:
-  no-clean-local-fs,add-archive:,add-zip:,
-  verbose,no-status"  -- "$@")
+  no-clean-local-fs,add-archive:,add-zip:"  -- "$@")
   
   eval set -- "$OPTS"
   while true
@@ -710,13 +703,26 @@ set_env () {
   script_name=$(basename $0)
   self=$script_path/$script_name
 
-default_casper_username=custom
+  pkg_source=$script_path/package.conf
+
+  default_casper_username=custom
 
   base_iso=
   inst=
   q=
   out_dev=
   vm_iso_name=
+
+  comp=xz
+
+  run_install=t
+  upgrade_build_env=t
+  clean_build_env=t
+  clean_local_fs=t
+  start_over=t
+
+  run_adjust=f
+  no_out_iso=f
 
   chroot_fd=">/dev/null"
 
@@ -730,9 +736,13 @@ default_casper_username=custom
   startdate=$(date +%s)
   no_status=f
 
+  upgrade_type="dist-upgrade"
+
   owner=
   [ $(whoami) = "root" ] && find_nonroot_owner || owner=$(whoami)
   eval outdir=~$owner/
+
+  requires="unsquashfs chroot mkisofs isohybrid mksquashfs date sed grep ps whoami rsync mount umount awk fold tput dirname basename dd cp getopt chmod find du sort unzip tar date"
 }
 
 main () {
