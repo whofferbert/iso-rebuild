@@ -161,8 +161,11 @@ Must be run as root.
 
    Debugging/Dev Options:
 
+    --verbose
+      Print all output generated when running in the chroot
+
     --quiet
-      Surpress output from chroot, but print script info. 
+      Surpress output from chroot, but print script info. (default)
 
     --real-quiet
       Surpress all output but errors
@@ -198,14 +201,15 @@ exit
 
 
 handle_args () {
-  OPTS=$(getopt -o hi:w:o:l:O:qsVRb:A: --long "help,iso:,
+  OPTS=$(getopt -o hi:w:o:l:O:qsVRb:A:v --long "help,iso:,
   workdir:,out-iso:,label:,no-install-recommends,
   nowrite,quiet,silent,write:,gz-iso,vm-iso,rebuild,buildstate:,
   adjust:,build-preinstall-script:,build-postinstall-script:,
   vm-preinstall-script:,vm-postinstall-script:,no-upgrade,
   no-clean-chroot,package-config:,out-dir:,out-vm-iso:,no-out-iso,
   real-quiet,no-dist-upgrde,dont-run-install,casper-name:
-  no-clean-local-fs,add-archive-to-root:,add-zip-to-root:"  -- "$@")
+  no-clean-local-fs,add-archive-to-root:,add-zip-to-root:,
+  verbose"  -- "$@")
   
   eval set -- "$OPTS"
   while true
@@ -222,6 +226,7 @@ handle_args () {
         -A|--adjust) run_adjust=t ; start_over=f ; adjust_script=$2 ; shift 2;;
         -R|--rebuild) start_over=f; shift;;
         -q|--quiet) chroot_fd=">/dev/null" ; shift;;
+        -v|--verbose) chroot_fd="" ; shift;;
         -s|--silent) q=">/dev/null 2>/dev/null" ; shift;;
         --real-quiet) q=">/dev/null" ; chroot_fd=">/dev/null 2>/dev/null"; shift;;
         --out-vm-iso) vm_iso_name="$2"; shift 2;;
@@ -658,6 +663,8 @@ set_env () {
   q=
   out_dev=
   vm_iso_name=
+
+  chroot_fd=">/dev/null"
 
   addzip=()
   addtar=()
