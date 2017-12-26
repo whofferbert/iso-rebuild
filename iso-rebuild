@@ -185,12 +185,12 @@ Must be run as root.
      sudo $script_name -i ~/ubuntu-mate-16.04.2-desktop-amd64.iso -l "Support Linux"
 
      # Create a new ISO and VM ISO with a custom label:
-     sudo $script_name -i ~/ubuntu-mate-16.04.2-desktop-amd64.iso -l "Support Linux" -V
+     sudo $script_name -i ~/ubuntu-mate-16.04.2-desktop-amd64.iso -V
 
      # Create an iso with a custom output name:
      sudo $script_name -i ~/$help_in_iso -o "${help_iso_name}-16.04.3-\$(date +%Y%m%d-%H%M%S)-stable-x86_64.iso
 
-     # create an ISO with additional debs installed via postinstall script and an .tar.gz :
+     # create an ISO with additional .deb files installed via postinstall script and a matching archive :
      mkdir /tmp/deb/
      cp -t /tmp/deb/ /path/to/deb1 /path/to/deb2 ...
      tar -czvf /tmp/debs.tar.gz /tmp/deb/*
@@ -210,7 +210,7 @@ Must be run as root.
      time sudo $script_name -i ~/$help_in_iso --package-config ./install_pkgs 
 
      # Create a new ISO with a custom package config file, and a specified output directory:
-     time sudo $script_name -i ~/$help_in_iso -q --out-dir /home/$USER
+     time sudo $script_name -i ~/$help_in_iso -q --out-dir /home/$owner
 
 
 EOF
