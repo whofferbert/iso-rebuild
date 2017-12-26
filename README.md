@@ -48,6 +48,7 @@ date
 
 $ ./iso-rebuild -h
 
+
 This is designed to take a *buntu iso image and customize it by installing or removing packages as specified in the 
 configuration.
 
@@ -184,6 +185,7 @@ packages.
 
     --real-quiet
       Surpress all output but errors
+
     --silent
       Surpress all output, including errors. 
 
@@ -227,23 +229,32 @@ packages.
      sudo iso-rebuild -i ~/ubuntu-mate-16.04.3-desktop-amd64.iso --add-archive ./sysstat_on.tar.gz 
 
      # Create a new ISO and VM ISO with additional VM preinstall script:
-     time sudo iso-rebuild -i ~/ubuntu-mate-16.04.3-desktop-amd64.iso -V --vm-preinstall ./pp_vm_init.sh
+     sudo iso-rebuild -i ~/ubuntu-mate-16.04.3-desktop-amd64.iso -V --vm-preinstall ./pp_vm_init.sh
 
      # Create a new ISO with additional preinstall script for adding a Google repository and Chrome:
-     time sudo iso-rebuild -i ~/ubuntu-mate-16.04.3-desktop-amd64.iso --preinstall ./init.sh 
+     sudo iso-rebuild -i ~/ubuntu-mate-16.04.3-desktop-amd64.iso --preinstall ./init.sh 
 
      # Create a new ISO with a custom package config file, and a specified output directory:
-     time sudo iso-rebuild -i ~/ubuntu-mate-16.04.3-desktop-amd64.iso --package-config ./install_pkgs 
+     sudo iso-rebuild -i ~/ubuntu-mate-16.04.3-desktop-amd64.iso --package-config ./install_pkgs 
 
      # Create a new ISO with a custom package config file, and a specified output directory:
-     time sudo iso-rebuild -i ~/ubuntu-mate-16.04.3-desktop-amd64.iso --out-dir /home/whofferbert
+     sudo iso-rebuild -i ~/ubuntu-mate-16.04.3-desktop-amd64.iso --out-dir /home/whofferbert
+
+
+     # Create a chroot and modify it, but do not make the iso afterward, and do not clean up:
+     sudo iso-rebuild -i ~/ubuntu-mate-16.04.3-desktop-amd64.iso --no-clean-local-fs --no-out-iso
+
+     # Don't reset the workdir, but take an existing chroot and make that an iso:
+     sudo iso-rebuild -i ~/ubuntu-mate-16.04.3-desktop-amd64.iso --rebuild --dont-run-install
+
+     # The combination of the above two commands will allow you to look at and/or
+     # modify it (), and then put the resultant chroot environment onto the ISO
+
 
      # You can combine most/all of the above options ...
      sudo iso-rebuild -i ~/ubuntu-mate-16.04.3-desktop-amd64.iso -l "will-linux" --package-config 
-./package.conf.example --add-archive ~/iso-rebuild-test/will.tar.gz --preinstall ./init.sh --no-install-recommends 
--o "will-buntu-16.04.iso" --add-archive ./sysstat_on.tar.gz --postinstall ./post.sh --out-dir ~/
-
+./package.conf.example --add-archive ~/will.tar.gz --preinstall ./init.sh --no-install-recommends -o 
+"will-buntu-16.04.iso" --add-archive ./sysstat_on.tar.gz --postinstall ./post.sh --out-dir ~/
 
 
 ```
-
