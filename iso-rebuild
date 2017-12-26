@@ -611,7 +611,7 @@ vm_iso_rebuild () {
   [ "$comp" = "gz" ] && vm_struct="--gz-iso"
 
   # this recalls the current script with --rebuild to finalize the VM iso
-  $self $vm_struct -i $base_iso -o "${vm_iso_name}" -l "$label" --rebuild --package-config $pkg_source --out-dir "$outdir" --dont-run-install --no-status
+  $self $vm_struct -i $base_iso -o "${vm_iso_name}" -l "$label" --rebuild --package-config $pkg_source --out-dir "$outdir" --dont-run-install --no-status --out-owner "$owner"
 }
 
 
