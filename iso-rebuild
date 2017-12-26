@@ -16,6 +16,8 @@ help_in_iso="ubuntu-mate-16.04.3-desktop-amd64.iso"
 label="iso-rebuild-custom"
 release_notes_url="https://github.com/whofferbert/iso-rebuild"
 
+out_owner="root"
+
 workdir=/home/.iso-rebuild
 
 #
@@ -49,6 +51,9 @@ Must be run as root.
 
     --out-dir
       Specify the output dir for the ISOs that will be built. Default is $outdir
+
+    --out-owner
+      Specify the owner of the logs and ISO files. Default is $out_owner.
 
 
     --vm-iso -V
@@ -239,7 +244,7 @@ handle_args () {
   vm-postinstall:,no-upgrade,no-clean-chroot,package-config:,
   out-dir:,out-vm-iso:,no-out-iso,verbose,no-status,
   real-quiet,no-dist-upgrde,dont-run-install,casper-name:
-  no-clean-local-fs,add-archive:,add-zip:"  -- "$@")
+  no-clean-local-fs,add-archive:,add-zip:,out-owner:"  -- "$@")
   
   eval set -- "$OPTS"
   while true
@@ -278,6 +283,7 @@ handle_args () {
         --casper-name) casper_username="$2" ; shift 2;;
         --add-archive) addtar+=("/ $2"); shift 2;;
         --add-zip) addzip+=("/ $2"); shift 2;;
+        --out-owner) out_owner="$2"; shift 2;;
         --) shift; break;;
       esac
   done
@@ -458,13 +464,7 @@ chroot_install () {
           for pkg in $pkg_sanity
             do
               eval chroot $chroot apt-get install -y $inst $pkg $chroot_fd
-              if [ $? -ne 0 ] 
-                then
-                  warn "Unable to install $pkg!" 
-                else 
-                  echo "Installed $pkg"
-                  pkg_adds+=($pkg)
-              fi
+              [ $? -ne 0 ] && warn "Unable to install $pkg!" || pkg_adds+=($pkg)
             done
         else
           for pkg in $pkg_sanity
@@ -671,6 +671,8 @@ chroot_to_iso () {
   # make it hybrid
   echo -e "\nMaking image USB friendly ...\n"
   isohybrid $outdir/$out_iso_name 
+
+  [ "$out_owner" != 'root' ] && chown ${out_owner}:${out_owner} $outdir/$out_iso_name
 }
 
 
@@ -690,8 +692,8 @@ logging () {
   [ -e $logfile ] && mv $logfile ${logfile}.old
   [ -e $errfile ] && mv $errfile ${errfile}.old
   #exec > >(logger | tee -a $logfile)
-  exec > >(tee -a $logfile)
-  exec 2> >(tee -a $errfile)
+  exec > >(sudo -u $out_owner tee -a $logfile)
+  exec 2> >(sudo -u $out_owner tee -a $errfile)
 }
 
 
