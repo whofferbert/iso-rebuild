@@ -15,7 +15,6 @@
 # stuff for functionaliy
 system_req="
 openssh-server
-davmail
 imagemagick
 netcat-openbsd
 tree
@@ -35,8 +34,6 @@ ncurses-term
 catdoc
 screen
 arandr
-wine1.6
-winetricks
 hexedit
 aptitude
 docutils-common
