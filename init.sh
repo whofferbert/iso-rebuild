@@ -6,8 +6,8 @@
 dpkg --add-architecture i386
 
 # pre-accept some EULA
-echo "wireshark-common  wireshark-common/install-setuid boolean false" | debconf-set-selections
-echo "ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true" | sudo debconf-set-selections
+#echo "wireshark-common  wireshark-common/install-setuid boolean false" | debconf-set-selections
+#echo "ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true" | sudo debconf-set-selections
 
 # add apt repos  here
 # get google key 
@@ -20,6 +20,6 @@ echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /e
 
 apt-get update
 apt-get install -y google-chrome-stable
-apt-get install -y wireshark-common ttf-mscorefonts-installer
+#apt-get install -y wireshark-common ttf-mscorefonts-installer
 
 echo -en ""
