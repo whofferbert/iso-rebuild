@@ -13,7 +13,6 @@ help_label="MATE 16.04.3 LTS"
 help_iso_name="mate"
 help_in_iso="ubuntu-mate-16.04.3-desktop-amd64.iso"
 
-default_casper_username=custom
 label="iso-rebuild-custom"
 release_notes_url="https://github.com/whofferbert/iso-rebuild"
 
@@ -167,6 +166,8 @@ Must be run as root.
 
     --quiet
       Surpress output from chroot, but print script info. (default)
+      Note that this causes problems with interactive prompts, so you may want
+      to try using --verbose if you seem to be having issues.
 
     --real-quiet
       Surpress all output but errors
@@ -369,8 +370,8 @@ mount_sanity () {
 
 cleanup () {
   echo "Received interrupt, exiting ..."
-  chroot $chroot/ umount /dev/pts/ /sys/ /proc/
-  umount $base_iso
+  unmount_chroot_procs
+  umount $img_dir
   umount $chroot/dev
   mount_sanity
   exit 1
@@ -691,6 +692,8 @@ set_env () {
   script_path=$( cd "$(dirname "$0")" ; pwd -P ) 
   script_name=$(basename $0)
   self=$script_path/$script_name
+
+default_casper_username=custom
 
   base_iso=
   inst=
