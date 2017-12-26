@@ -199,19 +199,30 @@ Must be run as root.
      sudo $script_name -i ~/$help_in_iso --add-archive ./sysstat_on.tar.gz 
 
      # Create a new ISO and VM ISO with additional VM preinstall script:
-     time sudo $script_name -i ~/$help_in_iso -V --vm-preinstall ./pp_vm_init.sh
+     sudo $script_name -i ~/$help_in_iso -V --vm-preinstall ./pp_vm_init.sh
 
      # Create a new ISO with additional preinstall script for adding a Google repository and Chrome:
-     time sudo $script_name -i ~/$help_in_iso --preinstall ./init.sh 
+     sudo $script_name -i ~/$help_in_iso --preinstall ./init.sh 
 
      # Create a new ISO with a custom package config file, and a specified output directory:
-     time sudo $script_name -i ~/$help_in_iso --package-config ./install_pkgs 
+     sudo $script_name -i ~/$help_in_iso --package-config ./install_pkgs 
 
      # Create a new ISO with a custom package config file, and a specified output directory:
-     time sudo $script_name -i ~/$help_in_iso --out-dir /home/$owner
+     sudo $script_name -i ~/$help_in_iso --out-dir /home/$owner
+
+
+     # Create a chroot and modify it, but do not make the iso afterward, and do not clean up:
+     sudo $script_name -i ~/$help_in_iso --no-clean-local-fs --no-out-iso
+
+     # Don't reset the workdir, but take an existing chroot and make that an iso:
+     sudo $script_name -i ~/$help_in_iso --rebuild --dont-run-install
+
+     # The combination of the above two commands will allow you to look at and/or
+     # modify it ($chroot), and then put the resultant chroot environment onto the ISO
+
 
      # You can combine most/all of the above options ...
-     sudo $script_name -i ~/$help_in_iso -l "will-linux" --package-config ./package.conf.example --add-archive ~/iso-rebuild-test/will.tar.gz --preinstall ./init.sh --no-install-recommends -o "will-buntu-16.04.iso" --add-archive ./sysstat_on.tar.gz --postinstall ./post.sh --out-dir ~/
+     sudo $script_name -i ~/$help_in_iso -l "will-linux" --package-config ./package.conf.example --add-archive ~/will.tar.gz --preinstall ./init.sh --no-install-recommends -o "will-buntu-16.04.iso" --add-archive ./sysstat_on.tar.gz --postinstall ./post.sh --out-dir ~/
 
 
 
@@ -447,7 +458,18 @@ chroot_install () {
           for pkg in $pkg_sanity
             do
               eval chroot $chroot apt-get install -y $inst $pkg $chroot_fd
-              [ $? -ne 0 ] && warn "Unable to install $pkg!" || echo "Installed $pkg"
+              if [ $? -ne 0 ] 
+                then
+                  warn "Unable to install $pkg!" 
+                else 
+                  echo "Installed $pkg"
+                  pkg_adds+=($pkg)
+              fi
+            done
+        else
+          for pkg in $pkg_sanity
+            do
+              pkg_adds+=($pkg)
             done
       fi
   fi
@@ -459,7 +481,11 @@ chroot_purge () {
   if [ -n "$pkgs" ] 
     then
       echo -e "\nPurging $pkgs from chroot environment ...\n"
-      eval chroot $chroot apt-get purge -y $pkg_batch $chroot_fd
+      eval chroot $chroot apt-get purge -y $pkgs $chroot_fd
+      for pkg in $pkgs
+        do
+          pkg_rms+=($pkg)
+        done
   fi
 }
 
@@ -695,6 +721,8 @@ status_out () {
   enddate=$(date +%s)
   time_diff=$(($enddate - $startdate))
   echo "Completed in $(convertsecs $time_diff)"
+  [ ${#pkg_adds[@]} -gt 0 ] && echo "Added ${#pkg_adds[@]} packages"
+  [ ${#pkg_rms[@]} -gt 0 ] && echo "Removed ${#pkg_rms[@]} packages"
   echo "Output ISO(s) are available in $outdir"
 }
 
@@ -732,6 +760,8 @@ set_env () {
   build_post_script=()
   vm_init_script=()
   vm_post_script=()
+  pkg_adds=()
+  pkg_rms=()
 
   startdate=$(date +%s)
   no_status=f
