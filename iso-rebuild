@@ -422,7 +422,7 @@ chroot_install () {
           for pkg in $pkg_sanity
             do
               eval chroot $chroot apt-get install -y $inst $pkg $chroot_fd
-              [ $? -ne 0 ] && warn "Unable to install $pkg!"
+              [ $? -ne 0 ] && warn "Unable to install $pkg!" || echo "Installed $pkg"
             done
       fi
   fi
@@ -457,7 +457,7 @@ add_zips_to_chroot () {
     do
       dest=$(echo "$data" | cut -d" " -f1)
       file=$(echo "$data" | cut -d" " -f2-)
-      mkdir -p $chroot/$dest
+      [ ! -d $chroot/$dest ] && mkdir -p $chroot/$dest
       unzip $file -d $chroot/$dest
     done
 }
@@ -467,7 +467,7 @@ add_tars_to_chroot () {
     do
       dest=$(echo "$data" | cut -d" " -f1)
       file=$(echo "$data" | cut -d" " -f2-)
-      mkdir -p $chroot/$dest
+      [ ! -d $chroot/$dest ] && mkdir -p $chroot/$dest
       tar -xf $file -C $chroot/$dest
     done
 }
@@ -555,6 +555,8 @@ write_cd_info () {
   sed -i "s/DISKNAME.\+/DISKNAME $label/g" $img_dir/README.diskdefines
   # first term of the next line used to dictate the live user name and system name
   echo -n "$casper_username $label" > $img_dir/.disk/info
+  sed -i 's/# export FLAVOUR=/export FLAVOUR=/' $chroot/etc/casper.conf
+  sed -i "s/USERNAME=\"[^\"]*\"/USERNAME=\"$casper_username\"/" $chroot/etc/casper.conf
   echo -n "$release_notes_url" > $img_dir/.disk/release_notes_url
   sed -i 's/quiet splash/noeject noprompt/g' $img_dir/isolinux/txt.cfg
   # put perms back
