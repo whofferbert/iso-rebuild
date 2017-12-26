@@ -3,7 +3,7 @@
 # example preinstall script
 
 # need i386?
-dpkg --add-architecture i386
+#dpkg --add-architecture i386
 
 # pre-accept some EULA
 #echo "wireshark-common  wireshark-common/install-setuid boolean false" | debconf-set-selections
@@ -13,7 +13,7 @@ dpkg --add-architecture i386
 # get google key 
 #wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
 wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | sudo apt-key add - 
-echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list
+echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list
 
 # comment out all repos
 #sed -i 's/^\([ \t]*deb\)/#\1/g' /etc/apt/sources.list{,.d/*}
