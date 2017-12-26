@@ -95,21 +95,21 @@ Must be run as root.
       Does not delete previous environment, just rebuilds the squashfs from the $img_dir
 
 
-    --preinstall-script
+    --preinstall
       Specify a script to run before updating and running package adjustments
-        A script to add repositories or keys would go here
+        May be specified any number of times.
 
-    --postinstall-script
+    --postinstall
       Specify a script to run after updating and running package adjustments
-        A script to clean the environment or force file modifications might go here
+        May be specified any number of times.
 
-    --vm-preinstall-script
+    --vm-preinstall
       Specify a script to run before running VM package adjustments
-        Same as --preinstall-script, but specific to VM ISOs
+        Same as --preinstall, but specific to VM ISOs
 
-    --vm-postinstall-script
+    --vm-postinstall
       Specify a script to run after running VM package adjustments
-        Same as --postinstall-script, but specific to VM ISOs
+        Same as --postinstall, but specific to VM ISOs
 
     --package-config /path/to/package.conf
       Provide the path to the package configuration to use (default is ${pkg_source})
@@ -195,7 +195,7 @@ Must be run as root.
      mkdir /tmp/deb/
      cp -t /tmp/deb/ /path/to/deb1 /path/to/deb2 ...
      tar -czvf /tmp/debs.tar.gz /tmp/deb/*
-     sudo $script_name -i ~/$help_in_iso --add-archive /tmp/debs.tar.gz --postinstall-script ./post.sh 
+     sudo $script_name -i ~/$help_in_iso --add-archive /tmp/debs.tar.gz --postinstall ./post.sh 
 
      # create an ISO with contents from your home directory on it :
      tar -czvf /tmp/$owner.tar.gz /home/$owner/{.ssh,.bashrc,.vimrc,Documents}
@@ -205,10 +205,10 @@ Must be run as root.
      sudo $script_name -i ~/$help_in_iso --add-archive ./sysstat_on.tar.gz 
 
      # Create a new ISO and VM ISO with additional VM preinstall script:
-     time sudo $script_name -i ~/$help_in_iso -V --vm-preinstall-script ./pp_vm_init.sh
+     time sudo $script_name -i ~/$help_in_iso -V --vm-preinstall ./pp_vm_init.sh
 
      # Create a new ISO with additional preinstall script for adding a Google repository and Chrome:
-     time sudo $script_name -i ~/$help_in_iso --preinstall-script ./init.sh 
+     time sudo $script_name -i ~/$help_in_iso --preinstall ./init.sh 
 
      # Create a new ISO with a custom package config file, and a specified output directory:
      time sudo $script_name -i ~/$help_in_iso --package-config ./install_pkgs 
@@ -216,8 +216,8 @@ Must be run as root.
      # Create a new ISO with a custom package config file, and a specified output directory:
      time sudo $script_name -i ~/$help_in_iso --out-dir /home/$owner
 
-     # you can combine these things...
-     sudo $script_name -i ~/$help_in_iso -l "will-linux" --package-config ./package.conf.example --add-archive ~/iso-rebuild-test/will.tar.gz --preinstall-script ./init.sh --no-install-recommends -o ~/will-buntu-16.04.iso --add-archive ./sysstat_on.tar.gz --postinstall-script ./post.sh
+     # You can combine most/all of the above options ...
+     sudo $script_name -i ~/$help_in_iso -l "will-linux" --package-config ./package.conf.example --add-archive ~/iso-rebuild-test/will.tar.gz --preinstall ./init.sh --no-install-recommends -o ~/will-buntu-16.04.iso --add-archive ./sysstat_on.tar.gz --postinstall ./post.sh
 
 
 
@@ -230,8 +230,8 @@ handle_args () {
   OPTS=$(getopt -o hi:w:o:l:O:qsVRb:A:v --long "help,iso:,
   workdir:,out-iso:,label:,no-install-recommends,
   nowrite,quiet,silent,write:,gz-iso,vm-iso,rebuild,buildstate:,
-  adjust:,preinstall-script:,postinstall-script:,
-  vm-preinstall-script:,vm-postinstall-script:,no-upgrade,
+  adjust:,preinstall:,postinstall:,
+  vm-preinstall:,vm-postinstall:,no-upgrade,
   no-clean-chroot,package-config:,out-dir:,out-vm-iso:,no-out-iso,
   real-quiet,no-dist-upgrde,dont-run-install,casper-name:
   no-clean-local-fs,add-archive:,add-zip:,
@@ -258,10 +258,10 @@ handle_args () {
         --out-vm-iso) vm_iso_name="$2"; shift 2;;
         --write) out_dev="$2"; shift 2;;
         --no-install-recommends) inst="--no-install-recommends" ; shift ;;
-        --preinstall-script) build_init_script="$2" ; shift 2;;
-        --postinstall-script) build_post_script="$2" ; shift 2;;
-        --vm-preinstall-script) vm_init_script="$2" ; shift 2;;
-        --vm-postinstall-script) vm_post_script="$2" ; shift 2;;
+        --preinstall) build_init_script+=("$2") ; shift 2;;
+        --postinstall) build_post_script+=("$2") ; shift 2;;
+        --vm-preinstall) vm_init_script+=("$2") ; shift 2;;
+        --vm-postinstall) vm_post_script+=("$2") ; shift 2;;
         --package-config) pkg_source="$2" ; shift 2;;
         --gz-iso) comp="gz" ; shift;;
         --no-upgrade) upgrade_build_env=f ; shift;;
@@ -379,7 +379,7 @@ cleanup () {
 
 
 clean_build_env () {
-  eval autorm_pkgs=$(chroot $chroot apt-get autoremove -s | grep ^Remv | awk '{print $2}') $chroot_fd
+  autorm_pkgs=$(chroot $chroot apt-get autoremove -s | grep ^Remv | awk '{print $2}')
   [ -n "$autorm_pkgs" ] && eval chroot $chroot apt-get purge $autorm_pkgs $chroot_fd
   eval chroot $chroot apt-get clean $chroot_fd
   find $chroot/tmp/ -mindepth 1 -delete
@@ -508,7 +508,11 @@ add_tars_to_chroot () {
 run_install () {
   echo -e "\nRunning iso customizations ...\n\nThis may take a while ...\n"
 
-  [ -n "$build_init_script" ] && chroot_exec $build_init_script 
+  #[ -n "$build_init_script" ] && chroot_exec $build_init_script 
+  if [ ${#build_init_script} -gt 0 ] 
+    then
+      for script in "${build_init_script[@]}" ; do chroot_exec $script ; done
+  fi
 
   [ ${#addzip[@]} -gt 0 ] && add_zips_to_chroot
   [ ${#addtar[@]} -gt 0 ] && add_tars_to_chroot
@@ -544,7 +548,11 @@ run_install () {
     done
 
   # exec postinstall script
-  [ -n "$build_post_script" ] && chroot_exec $build_post_script 
+  #[ -n "$build_post_script" ] && chroot_exec $build_post_script 
+  if [ ${#build_post_script} -gt 0 ] 
+    then
+      for script in "${build_post_script[@]}" ; do chroot_exec $script ; done
+  fi
 
   # clean build env?
   [ "$clean_build_env" = "t" ] && clean_build_env
@@ -557,7 +565,11 @@ vm_iso_rebuild () {
   # tweak deployment.type
   mount_chroot_procs
 
-  [ -n "$vm_init_script" ] && chroot_exec $vm_init_script 
+  #[ -n "$vm_init_script" ] && chroot_exec $vm_init_script 
+  if [ ${#vm_init_script} -gt 0 ] 
+    then
+      for script in "${vm_init_script[@]}" ; do chroot_exec $script ; done
+  fi
 
   for pkg_rm in "$VM_PRERM_PKGS" "$VM_REMOVE_PKGS" "$VM_POSTRM_PKGS"
     do
@@ -569,7 +581,11 @@ vm_iso_rebuild () {
       chroot_install $pkg_batch
   done
 
-  [ -n "$vm_post_script" ] && chroot_exec $vm_post_script 
+  #[ -n "$vm_post_script" ] && chroot_exec $vm_post_script 
+  if [ ${#vm_post_script} -gt 0 ] 
+    then
+      for script in "${vm_post_script[@]}" ; do chroot_exec $script ; done
+  fi
 
   unmount_chroot_procs
   
@@ -686,6 +702,7 @@ status_out () {
   enddate=$(date +%s)
   time_diff=$(($enddate - $startdate))
   echo "Completed in $(convertsecs $time_diff)"
+  echo "Output ISO(s) are available in $outdir"
 }
 
 set_env () {
@@ -705,6 +722,10 @@ default_casper_username=custom
 
   addzip=()
   addtar=()
+  build_init_script=()
+  build_post_script=()
+  vm_init_script=()
+  vm_post_script=()
 
   startdate=$(date +%s)
   no_status=f
