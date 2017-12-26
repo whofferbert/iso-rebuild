@@ -35,7 +35,7 @@ ncurses-term
 catdoc
 screen
 arandr
-wine
+wine1.6
 winetricks
 hexedit
 aptitude
@@ -44,7 +44,6 @@ docutils-doc
 icu-devtools
 ieee-data
 lm-sensors
-ttf-mscorefonts-installer
 mcelog"
 
 # i386 java compatability stuff 
@@ -104,7 +103,6 @@ sqlite3"
 
 # programs useful for support
 support_utils="
-wireshark
 evolution
 ack-grep
 clusterssh
