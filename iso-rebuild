@@ -5,10 +5,6 @@
 # This is a script to rebuild a specified *buntu iso into a customized iso
 #
 
-#
-# Environmental Variables - Default settings
-#
-
 help_label="MATE 16.04.3 LTS"
 help_iso_name="mate"
 help_in_iso="ubuntu-mate-16.04.3-desktop-amd64.iso"
@@ -20,16 +16,12 @@ out_owner="root"
 
 workdir=/home/.iso-rebuild
 
-#
-# Functions
-#
-
 helps () {
 fold -w$(tput cols) -s << EOF
 
 This is designed to take a *buntu iso image and customize it by installing or removing packages as specified in the configuration.
 
-Must be run as root.
+Must be run as root (or with sudo).
 
   Usage:
 
@@ -38,10 +30,11 @@ Must be run as root.
   Overview:
 
 
-   Required Input:
+   Input Options:
 
     --base-iso -i ISOFILE
       Select an iso file to start building the image off of.
+      Required unless a previous build was ran with --no-clean and the --rebuild switch is used.
 
 
    Output Options:
@@ -117,6 +110,14 @@ Must be run as root.
 
     --no-clean-chroot
       Do not clean up the chroot environment after running install. Default is to run the clean.
+
+
+   Investigative Options
+
+    --login-chroot
+      This option will NOT cause an image to be rebuilt, but instead, will log you into the created chroot environment.
+      Once you log out of the chroot environment, the script will just exit.
+      Only useful if a build has previously been used with --no-clean-local-fs
 
 
    Filesystem Options (can be specified multiple times):
@@ -230,6 +231,8 @@ Must be run as root.
      sudo $script_name -i ~/$help_in_iso -l "will-linux" --package-config ./package.conf.example --add-archive ~/will.tar.gz --preinstall ./init.sh --no-install-recommends -o "will-buntu-16.04.iso" --add-archive ./sysstat_on.tar.gz --postinstall ./post.sh --out-dir ~/
 
 
+     # Explore an already built environment (with --no-clean-local-fs)
+     sudo $script_name --login-chroot
 
 EOF
 exit
@@ -240,7 +243,7 @@ handle_args () {
   OPTS=$(getopt -o hi:w:o:l:O:qsVRb:A:v --long "help,iso:,
   workdir:,out-iso:,label:,no-install-recommends,nowrite,
   quiet,silent,write:,gz-iso,vm-iso,rebuild,buildstate:,
-  adjust:,preinstall:,postinstall:,vm-preinstall:,
+  adjust:,preinstall:,postinstall:,vm-preinstall:,login-chroot,
   vm-postinstall:,no-upgrade,no-clean-chroot,package-config:,
   out-dir:,out-vm-iso:,no-out-iso,verbose,no-status,
   real-quiet,no-dist-upgrde,dont-run-install,casper-name:
@@ -284,6 +287,7 @@ handle_args () {
         --add-archive) addtar+=("/ $2"); shift 2;;
         --add-zip) addzip+=("/ $2"); shift 2;;
         --out-owner) out_owner="$2"; shift 2;;
+        --login-chroot) chroot_login="t" ; shift;;
         --) shift; break;;
       esac
   done
@@ -325,8 +329,8 @@ sanity_checks () {
   [ $(whoami) != root ] && err "Error: must be root to continue."
   # need pkg source
   [ -e $pkg_source ] && source $pkg_source || err "Error: $pkg_source does not exist"
-  # need that base iso
-  [ -z "$base_iso" ] && err "Error: base-iso is required. See the help ($self --help"
+  # need base iso or chroot login
+  [ -z "$base_iso" -a "$start_over" != "f" -a "$chroot_login" != "t" ] && err "Error: base-iso is required. See the help ($self --help"
 
   # sanity checks for output device
   if [ -n "$out_dev" ]
@@ -365,9 +369,11 @@ sanity_checks () {
 
 mount_sanity () {
   # logic to help save the shared dev env from suffering an rm
-  chroot_mounts=$(mount | awk '{print $3}' | grep $workdir | tac)
+  #chroot_mounts=$(mount | awk '{print $3}' | grep $workdir | tac)
+  chroot_mounts=$(mount | awk '{print $3}' | grep $workdir | tac | grep -v base)
   [ -n "$chroot_mounts" ] && unmount_chroot_procs
-  chroot_mounts=$(mount | awk '{print $3}' | grep $workdir | tac)
+  #chroot_mounts=$(mount | awk '{print $3}' | grep $workdir | tac)
+  chroot_mounts=$(mount | awk '{print $3}' | grep $workdir | tac | grep -v base)
   if [ -n "$chroot_mounts" ]
     then
       for mount in $chroot_mounts
@@ -423,6 +429,10 @@ unmount_chroot_procs () {
   eval chroot $chroot umount -lf /sys $chroot_fd
   eval chroot $chroot umount -lf /proc $chroot_fd
   eval chroot $chroot umount /dev
+  mount | grep $workdir | awk '{print $3}' | tac | while read mntpoint
+    do
+      sudo umount $mntpoint
+    done
 }
 
 
@@ -527,7 +537,6 @@ add_tars_to_chroot () {
 run_install () {
   echo -e "\nRunning iso customizations ...\n\nThis may take a while ...\n"
 
-  #[ -n "$build_init_script" ] && chroot_exec $build_init_script 
   if [ ${#build_init_script} -gt 0 ] 
     then
       for script in "${build_init_script[@]}" ; do chroot_exec $script ; done
@@ -566,8 +575,6 @@ run_install () {
       chroot_install $pkg_batch
     done
 
-  # exec postinstall script
-  #[ -n "$build_post_script" ] && chroot_exec $build_post_script 
   if [ ${#build_post_script} -gt 0 ] 
     then
       for script in "${build_post_script[@]}" ; do chroot_exec $script ; done
@@ -660,9 +667,7 @@ chroot_to_iso () {
   rebuild_squashfs
 
   # build md5sums.txt for iso ...
-  cd $img_dir
-  find . -type f -print0 | xargs -0 md5sum | grep -v "\./md5sum.txt$" > $img_dir/md5sum.txt
-  cd - >/dev/null
+  find $img_dir -type f -print0 | xargs -0 md5sum | sed "s; $img_dir; ;" | grep -v "\./md5sum.txt$" > $img_dir/md5sum.txt
   
   # build iso
   echo -e "\nBuilding new image ...\n"
@@ -728,11 +733,21 @@ status_out () {
   echo "Output ISO(s) are available in $outdir"
 }
 
+
+visit_chroot () {
+  #enter the chroot, then leave it, unmount and exit
+  mount_chroot_procs
+  chroot $chroot
+  unmount_chroot_procs
+  exit
+}
+
+
 set_env () {
   script_path=$( cd "$(dirname "$0")" ; pwd -P ) 
   script_name=$(basename $0)
   self=$script_path/$script_name
-
+ 
   pkg_source=$script_path/package.conf
 
   default_casper_username=custom
@@ -753,6 +768,7 @@ set_env () {
 
   run_adjust=f
   no_out_iso=f
+  no_status=f
 
   chroot_fd=">/dev/null"
 
@@ -766,13 +782,18 @@ set_env () {
   pkg_rms=()
 
   startdate=$(date +%s)
-  no_status=f
 
   upgrade_type="dist-upgrade"
+  label="iso-rebuild-custom"
+  release_notes_url="https://github.com/whofferbert/iso-rebuild"
 
+  workdir=/home/.iso-rebuild
+
+  out_owner="root"
   owner=
   [ $(whoami) = "root" ] && find_nonroot_owner || owner=$(whoami)
   eval outdir=~$owner/
+  [ $owner != 'root' ] && out_owner=$owner
 
   requires="unsquashfs chroot mkisofs isohybrid mksquashfs date sed grep ps whoami rsync mount umount awk fold tput dirname basename dd cp getopt chmod find du sort unzip tar date"
 }
@@ -781,7 +802,9 @@ main () {
  
   ### logic and stuff
   sanity_checks
-  
+ 
+  [ "$chroot_login" = t ] && visit_chroot
+ 
   # trap interrupts to not break things
   trap cleanup 1 2 3 6 9 15 17 19 23
 
@@ -819,5 +842,4 @@ main () {
 set_env
 handle_args $@
 eval main $q
-
 
